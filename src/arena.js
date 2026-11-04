@@ -161,6 +161,7 @@ function buildScene(data) {
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
 }
 let pd = null;
+let controllerView = 'arena', controllerBuild = false, controllerBody = true, controllerVisionSource = 'arena';
 function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
 function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
@@ -239,12 +240,14 @@ function onWorker(f, m) {
   if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
+    if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', body: { id: f.id, position: m.pos, yaw: m.yaw, orientation: [0, 0, Math.sin((m.yaw || 0) / 2), Math.cos((m.yaw || 0) / 2)] } }, '*');
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
     f.activityTime = m.t; brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
+    if (window.parent !== window) { const active = []; for (let i = 0; i < m.trace.length && active.length < 1000; i++) if (m.trace[i] > 0.001) active.push({ id: i, activity: m.trace[i] }); window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', activity: active }, '*'); }
   }
 }
 let foodDirty = false, lastOthers = 0;
@@ -294,6 +297,7 @@ function onClick(e) {
   for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
+  if (tool === 'remove') { const candidates = [...env.food.map((o,i)=>({kind:'food',o,i})), ...env.bitterPatches.map((o,i)=>({kind:'bitter',o,i})), ...env.obstacles.map((o,i)=>({kind:'obstacle',o,i}))]; let best=null, dist=Infinity; for (const c of candidates) { const d=Math.hypot(c.o.x-p.x,c.o.y-p.y); if(d<dist){dist=d;best=c;} } if(best&&dist<0.5){ const key=best.kind==='food'?'food':best.kind==='bitter'?'bitterPatches':'obstacles'; env[key].splice(best.i,1); } }
   if (tool === 'food') { env.food.push({ x: p.x, y: p.y, r: 0.25, sugar: 1, bitter: 0, water: 0.2, amount: 5 }); env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 0.8, sigma: 0.7 }); }
   if (tool === 'odor') env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 1, sigma: 0.9 });
   if (tool === 'co2') env.odors.push({ x: p.x, y: p.y, odor: 'co2', strength: 1, sigma: 0.8 });
@@ -479,6 +483,52 @@ function animate() {
   brainPts.rotation.y += elapsed * 0.12; hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
 
 }
+
+// Controller iframe bridge. It keeps the existing simulation worker and render loop as the source of truth.
+window.addEventListener('message', e => {
+  if (e.source !== window.parent || e.data?.source !== 'fly-controller') return;
+  const m = e.data;
+  if (m.type === 'controller:run' || m.type === 'controller:pause') {
+    running = m.type === 'controller:run';
+    for (const f of flies) if (f.ready) f.worker.postMessage({ type: running ? 'run' : 'pause' });
+    const play = $('#play'); if (play) play.textContent = running ? '❚❚ Pause' : '▶ Run';
+  } else if (m.type === 'controller:body') {
+    controllerBody = !!m.enabled;
+    for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; }
+  } else if (m.type === 'controller:build') {
+    controllerBuild = !!m.enabled;
+    if (controllerBuild) { running = false; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'pause' }); }
+    else { running = true; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'run' }); }
+    const play = $('#play'); if (play) play.textContent = running ? '❚❚ Pause' : '▶ Run';
+  } else if (m.type === 'controller:tool') {
+    tool = ({ sugar: 'food', aversive: 'bitter', cube: 'obstacle', remove: 'remove' })[m.tool] || 'none';
+  } else if (m.type === 'controller:vision-source') {
+    controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
+  } else if (m.type === 'controller:view') {
+    controllerView = m.view;
+    const arena = controllerView === 'arena';
+    $('#panel').hidden = !arena;
+    $('#brainpanel').hidden = arena;
+    $('#c').style.display = arena ? 'block' : 'none';
+    if (!arena) {
+      const eyes = $('#bpBody .eyes'), groupsEl = $('#groups'), brain = $('#brain');
+      eyes.hidden = controllerView !== 'vision' || controllerVisionSource === 'external';
+      groupsEl.hidden = controllerView !== 'brain';
+      brain.style.display = controllerView === 'brain' ? 'block' : 'none';
+      $('#bpBody').style.display = 'block';
+      $('#brainpanel').style.display = 'block';
+    }
+  } else if (m.type === 'controller:reset-view') {
+    controls?.reset?.();
+  } else if (m.type === 'api:signal') {
+    // The API transport is connected. A biological reward/punishment pathway is not
+    // inferred here; the event is retained for a future explicit neuromodulation model.
+    for (const f of flies) if (f.ready) f.worker.postMessage(m.signal);
+  } else if (m.type === 'api:sensory-input') {
+    for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'sensory_input', ...m.input });
+  }
+});
+
 main().catch(e => { if ($('#status')) status('error: ' + e.message); console.error(e); });
 
 // side panels fold to their title bar (chevron button, or the [ and ] keys); the choice persists
