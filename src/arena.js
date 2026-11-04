@@ -528,6 +528,20 @@ window.addEventListener('message', e => {
     for (const f of flies) if (f.ready) f.worker.postMessage(m.signal);
   } else if (m.type === 'api:sensory-input') {
     for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'sensory_input', ...m.input });
+  } else if (m.type === 'api:neuron-fire') {
+    for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'neuron:fire', ...m.command });
+  } else if (m.type === 'api:arena-place') {
+    const { kind, x = 0, y = 0 } = m.command;
+    if (kind === 'sugar') { env.food.push({ x, y, r: 0.25, sugar: 1, bitter: 0, water: 0.2, amount: 5 }); env.odors.push({ x, y, odor: 'vinegar', strength: 0.8, sigma: 0.7 }); }
+    else if (kind === 'aversive') env.bitterPatches.push({ x, y, r: 0.25, bitter: 1 });
+    else if (kind === 'cube') env.obstacles.push({ type: 'box', x, y, sx: 0.2, sy: 0.2, sz: 0.3 });
+    rebuildEnv(); syncEnv();
+  } else if (m.type === 'api:arena-remove') {
+    const { x = 0, y = 0 } = m.command;
+    const candidates = [...env.food.map((o,i)=>({key:'food',o,i})), ...env.bitterPatches.map((o,i)=>({key:'bitterPatches',o,i})), ...env.obstacles.map((o,i)=>({key:'obstacles',o,i}))];
+    let best = null, dist = Infinity;
+    for (const c of candidates) { const d = Math.hypot(c.o.x-x,c.o.y-y); if (d < dist) { dist=d; best=c; } }
+    if (best && dist < 0.5) { env[best.key].splice(best.i,1); rebuildEnv(); syncEnv(); }
   }
 });
 
