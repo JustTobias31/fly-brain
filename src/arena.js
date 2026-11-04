@@ -82,6 +82,7 @@ async function main() {
   buildBrainPanel(data);
   buildScene(data);
   buildUI();
+  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'ready' }, '*');
   $('#loading').remove();
   const st0 = PRESET.start || [0, 0, 0];
   if (PRESET.flySpots) for (const s of PRESET.flySpots.slice(0, FLY_CAP)) await addFly(s.pos, s.yaw, s.sex);
