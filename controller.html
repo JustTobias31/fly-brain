@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fly Brain · Controller</title>
+<link rel="stylesheet" href="/src/controller.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><strong>FLY BRAIN</strong><span>CONTROLLER</span></div>
+  <nav class="views" aria-label="Views">
+    <button class="view active" data-view="arena">Arena</button>
+    <button class="view" data-view="brain">Brain</button>
+    <button class="view" data-view="vision">What it sees</button>
+  </nav>
+  <div class="status"><i id="connection"></i><span id="connectionText">API disconnected</span></div>
+</header>
+<main>
+  <iframe id="simulation" src="/arena.html" title="Fly simulation"></iframe>
+  <aside class="controls">
+    <section>
+      <h2>Simulation</h2>
+      <div class="actions"><button id="run" class="primary">Pause simulation</button><button id="resetView">Reset view</button></div>
+      <label class="switch"><span>Body enabled</span><input id="body" type="checkbox" checked><i></i></label>
+      <label class="switch"><span>WebSocket API</span><input id="websocket" type="checkbox"><i></i></label>
+      <label class="switch"><span>External vision stream</span><input id="externalVision" type="checkbox"><i></i></label>
+      <p class="hint">The brain continues running when the body is disabled. External vision input is accepted through the sensory API.</p>
+    </section>
+    <section>
+      <h2>Build mode</h2>
+      <label class="switch"><span>Pause and edit arena</span><input id="build" type="checkbox"><i></i></label>
+      <div class="buildtools">
+        <button data-place="sugar">＋ Sugar</button>
+        <button data-place="aversive">＋ Aversive</button>
+        <button data-place="cube">＋ Cube</button>
+        <button data-place="remove">− Remove</button>
+      </div>
+      <p class="hint">Choose an item, then click a location in the arena. Leave build mode to resume.</p>
+    </section>
+    <section>
+      <h2>Signals</h2>
+      <div class="actions"><button id="reward">Reward</button><button id="punish">Punish</button></div>
+      <label>Intensity <input id="intensity" type="range" min="0" max="10" step=".1" value="1"><output id="intensityValue">1.0</output></label>
+      <p class="hint">Signals are sent to the local API. Their biological effect depends on the simulation adapter.</p>
+    </section>
+    <section>
+      <h2>API</h2>
+      <div class="apirow"><label for="api">HTTP address</label><input id="api" value="http://127.0.0.1:8000"></div>
+      <div class="apirow"><label for="ws">WebSocket address</label><input id="ws" value="ws://127.0.0.1:8000/ws"></div>
+      <button id="connect">Connect</button>
+      <pre id="apiLog">Waiting for local API…</pre>
+    </section>
+  </aside>
+</main>
+<script type="module" src="/src/controller.js"></script>
+</body>
+</html>
