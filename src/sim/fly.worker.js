@@ -5,7 +5,7 @@ import { attachBrain, attachEyes, attachEyesGpu } from '../brainsetup.js';
 import { buildGroups, GroupMeter } from './groups.js';
 
 let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null;
-let proxyIds = [], lastPose = -Infinity, loopActive = false;
+let proxyIds = [], lastPose = -Infinity, loopActive = false, bodyEnabled = true;
 const POSE_EVERY = 1000 / 30; // wall ms: twelve workers must not flood the render thread
 
 onmessage = async (e) => {
@@ -23,6 +23,7 @@ onmessage = async (e) => {
     const flyvis = eyes ? { eyes, map: m.flyvisMap, gain: 150, vRest: gpuEyes?.vRest } : null;
     fly = new FlyAgent({ brain, flyvis, mj, flyXML: m.flyXML, env, data, size: g.size, sign: g.sign, bodymap: m.bodymap, gait: m.gait, id: m.id,
       pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex });
+    fly.bodyEnabled = bodyEnabled;
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
     postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj) });
@@ -31,9 +32,9 @@ onmessage = async (e) => {
   } else if (m.type === 'run') { if (running) return; running = true; lastReal = performance.now(); clearTimeout(timer); if (fly) loop(); }   // before init: loop starts once ready; clearTimeout kills a pending reschedule from a paused loop
   else if (m.type === 'pause') { running = false; clearTimeout(timer); }
   else if (m.type === 'speed') speed = m.speed;
-  else if (m.type === 'body') { fly.bodyEnabled = !!m.enabled; if (!fly.bodyEnabled) { fly.flight.active = false; fly.cmd = { v: 0, turn: 0 }; } }
-  else if (m.type === 'sensory_input') { fly.externalSensoryInput = m; }
-  else if (m.type === 'reward' || m.type === 'punish') { fly.lastExternalSignal = { type: m.type, intensity: m.intensity, duration_ms: m.duration_ms, received_at: performance.now() }; }
+  else if (m.type === 'body') { bodyEnabled = !!m.enabled; if (fly) { fly.bodyEnabled = bodyEnabled; if (!bodyEnabled) { fly.flight.active = false; fly.cmd = { v: 0, turn: 0 }; } } }
+  else if (m.type === 'sensory_input') { if (fly) fly.externalSensoryInput = m; }
+  else if (m.type === 'reward' || m.type === 'punish') { if (fly) fly.lastExternalSignal = { type: m.type, intensity: m.intensity, duration_ms: m.duration_ms, received_at: performance.now() }; }
   else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); }
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
   else if (m.type === 'mode') fly.motor.mode = m.mode;
