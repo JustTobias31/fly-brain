@@ -226,11 +226,11 @@ async function addFly(pos, yaw, sex = 'm') {
   if (nextId >= FLY_CAP) { alert(`Worker-pool cap reached: ${FLY_CAP} flies (?flies=N to raise, max ${MAX_FLIES})`); return; }
   const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) };
+  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) }; f.group.visible = controllerBody; f.ring.visible = controllerBody && id === selected;
   scene.add(f.group); flies.push(f); batches.add(f);
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: FLY_CAP - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: !NO_VISION, sex,
-    brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap });
+    brainMem: { memory: brainMem.memory, graph: brainMem.graph, bases: brainMem.bases, opts: brainMem.opts, fv: brainMem.fv }, wasmModule, slot: id, flyvisMap, bodyEnabled: controllerBody });
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
@@ -296,6 +296,7 @@ function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
   for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
+  if (window.parent !== window && !controllerBuild) return;
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
   if (tool === 'remove') { const candidates = [...env.food.map((o,i)=>({kind:'food',o,i})), ...env.bitterPatches.map((o,i)=>({kind:'bitter',o,i})), ...env.obstacles.map((o,i)=>({kind:'obstacle',o,i}))]; let best=null, dist=Infinity; for (const c of candidates) { const d=Math.hypot(c.o.x-p.x,c.o.y-p.y); if(d<dist){dist=d;best=c;} } if(best&&dist<0.5){ const key=best.kind==='food'?'food':best.kind==='bitter'?'bitterPatches':'obstacles'; env[key].splice(best.i,1); } }
