@@ -28,7 +28,7 @@ export class FlyAgent {
     this.jointAdr = {}; this.jointDof = {}; for (let j = 0; j < M.njnt; j++) { this.jointAdr[M.jnt(j).name] = M.jnt_qposadr[j]; this.jointDof[M.jnt(j).name] = M.jnt_dofadr[j]; }
     // geoms: albedo for vision; which bodies count as "self body" for bristle contact
     this.geomKind = []; for (let g = 0; g < M.ngeom; g++) { const n = M.geom(g).name; this.geomKind.push(n === 'floor' ? 'floor' : n.startsWith('wall') ? 'wall' : n.startsWith('food') ? 'food' : n.startsWith('bitter') ? 'bitter' : n.startsWith('hazard') ? 'hazard' : n.startsWith('obst') ? 'obst' : n.startsWith('proxy') ? 'fly' : n.startsWith('threat') ? 'threat' : 'self'); }
-    this.floorGeom = M.geom('floor').id;
+    this.floorGeom = M.geom('floor').id; this.obstacleGeomCount = env.obstacles.length;
     this.rootJoint = -1; this.rootQpos = -1; this.rootDof = -1;
     for (let j = 0; j < M.njnt; j++) if (M.jnt_bodyid[j] === this.bid.thorax && M.jnt_type[j] === 0) { this.rootJoint = j; this.rootQpos = M.jnt_qposadr[j]; this.rootDof = M.jnt_dofadr[j]; break; }
     this.threatMocap = M.body_mocapid[M.body('threat').id];
@@ -85,6 +85,18 @@ export class FlyAgent {
     d.qvel.fill(0, this.rootDof, this.rootDof + 6);
     this.mj.mj_forward(this.model, d);
     return true;
+  }
+  syncObstacles() {
+    const M = this.model;
+    for (let k = 0; k < this.obstacleGeomCount; k++) {
+      let id; try { id = M.geom(`obst${k}`).id; } catch { continue; }
+      const o = this.env.obstacles[k];
+      if (!o) { M.geom_contype[id] = 0; M.geom_conaffinity[id] = 0; M.geom_pos.set([0, 0, -20], id * 3); continue; }
+      M.geom_contype[id] = 2; M.geom_conaffinity[id] = 2;
+      M.geom_size.set(o.type === 'box' ? [o.sx, o.sy, o.sz / 2] : [o.r, o.r, o.sz / 2], id * 3);
+      M.geom_pos.set([o.x, o.y, o.sz / 2], id * 3);
+    }
+    this.mj.mj_forward(M, this.mjd);
   }
   setArenaRadius(radius) {
     if (!Number.isFinite(radius) || radius < 1 || radius > 100) return false;
