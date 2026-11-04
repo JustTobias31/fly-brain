@@ -6,7 +6,7 @@ physics-simulated body, in a web browser, and then asks a simple question: which
 fly's behaviours does the wiring produce on its own, and which had to be added from
 outside the graph? The second list turned out to be as interesting as the first.
 
-**Try it:** [arena](https://lulzx.com/fly-brain/arena.html) ·
+**Try it:** [controller](./controller.html) · [arena](https://lulzx.com/fly-brain/arena.html) ·
 [connectome viewer](https://lulzx.com/fly-brain/) ·
 [algorithmic structures](https://lulzx.com/fly-brain/structures.html) ·
 [the textbook](https://lulzx.com/fly-brain/textbook/)
@@ -20,6 +20,19 @@ outside the graph? The second list turned out to be as interesting as the first.
   browser actually loads.
 - [The four apps](docs/guide/apps.md). The connectome viewer, the structures page, the arena,
   and the 3D fly.
+
+## Local controller and API
+
+Open `/controller` when running Vite locally. The controller provides Arena, Brain, and What it sees views, body enable/disable, build mode, and a local WebSocket control bridge.
+
+Run the API in a second terminal from the repository root:
+
+```bash
+python -m pip install -r server/requirements.txt
+python -m uvicorn server.app:app --host 127.0.0.1 --port 8000 --reload
+```
+
+See [`server/README.md`](server/README.md) for REST and WebSocket message formats and current integration limits.
 
 ## How it works
 
@@ -53,6 +66,8 @@ outside the graph? The second list turned out to be as interesting as the first.
 |---|---|
 | `index.html`, `src/main.js` | connectome viewer |
 | `arena.html`, `src/arena.js` | embodied arena |
+| `controller.html`, `src/controller.js` | local three-view controller |
+| `server/` | local FastAPI and WebSocket bridge |
 | `structures.html`, `src/structures.js` | algorithmic-structure visualisation |
 | `textbook/`, `src/textbook.js` | ebook reader for `docs/textbook/` |
 | `src/sim/` | fly agent, world, senses, vision, motor, endogenous behaviour, neuromodulation, flight, worker |
