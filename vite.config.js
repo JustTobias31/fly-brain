@@ -12,13 +12,14 @@ const NOT_DEPLOYED = ['graph_w3.bin', 'neurons.bin'];
 const dropUnpacked = { name: 'drop-unpacked-data', apply: 'build', closeBundle() { for (const f of NOT_DEPLOYED) fs.rmSync(`dist/data/${f}`, { force: true }); } };
 // Cross-origin isolation enables SharedArrayBuffer (one read-only connectome shared by all fly workers)
 const isolation = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
+const controllerRoute = { name: 'controller-route', configureServer(server) { server.middlewares.use((req, res, next) => { if (req.url?.split('?')[0] === '/controller') req.url = req.url.replace('/controller', '/controller.html'); next(); }); }, configurePreviewServer(server) { server.middlewares.use((req, res, next) => { if (req.url?.split('?')[0] === '/controller') req.url = req.url.replace('/controller', '/controller.html'); next(); }); } };
 export default defineConfig({
   base: process.env.BASE_PATH || '/', // CI sets /fly-brain/ for GitHub Pages
-  plugins: [dropUnpacked],
+  plugins: [dropUnpacked, controllerRoute],
   define: { __DATA_FILES__: JSON.stringify(DATA_FILES) },
   server: { headers: isolation },
   preview: { headers: isolation },
   optimizeDeps: { exclude: ['@mujoco/mujoco'] },
   worker: { format: 'es' },
-  build: { target: 'esnext', rollupOptions: { input: { main: 'index.html', arena: 'arena.html', fly: 'fly.html', structures: 'structures.html', textbook: 'textbook/index.html' } } },
+  build: { target: 'esnext', rollupOptions: { input: { main: 'index.html', arena: 'arena.html', controller: 'controller.html', fly: 'fly.html', structures: 'structures.html', textbook: 'textbook/index.html' } } },
 });
