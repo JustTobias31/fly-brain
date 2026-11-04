@@ -1,5 +1,5 @@
 const frame=document.querySelector("#simulation"), statusDot=document.querySelector("#connection"),statusText=document.querySelector("#connectionText"),log=document.querySelector("#apiLog");
-let socket=null, running=true, selectedTool=null, latestBody=null, latestActivity=null;
+let socket=null, running=true, selectedTool=null, latestBody=null, latestActivity=null, pendingMetadata=[];
 const send=(type,data={})=>frame.contentWindow?.postMessage({source:"fly-controller",type,...data},"*");
 const logLine=s=>{log.textContent=(s+"\n"+log.textContent).slice(0,3500)};
 function setView(view){document.querySelectorAll("[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));send("controller:view",{view})}
