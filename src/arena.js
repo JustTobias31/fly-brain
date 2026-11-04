@@ -506,6 +506,7 @@ window.addEventListener('message', e => {
     tool = ({ sugar: 'food', aversive: 'bitter', cube: 'obstacle', remove: 'remove' })[m.tool] || 'none';
   } else if (m.type === 'controller:vision-source') {
     controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
+    if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'External vision is selected. Send visual sensory data to POST /input with modality set to vision.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external'; }
   } else if (m.type === 'controller:view') {
     controllerView = m.view;
     const arena = controllerView === 'arena';
@@ -515,6 +516,8 @@ window.addEventListener('message', e => {
     if (!arena) {
       const eyes = $('#bpBody .eyes'), groupsEl = $('#groups'), brain = $('#brain');
       eyes.hidden = controllerView !== 'vision' || controllerVisionSource === 'external';
+      let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'External vision is selected. Send visual sensory data to POST /input with modality set to vision.'; $('#bpBody').append(note); } note.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external';
+      $('#brainpanel').classList.remove('folded');
       groupsEl.hidden = controllerView !== 'brain';
       brain.style.display = controllerView === 'brain' ? 'block' : 'none';
       $('#bpBody').style.display = 'block';
