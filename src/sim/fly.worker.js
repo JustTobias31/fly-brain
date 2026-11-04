@@ -31,6 +31,9 @@ onmessage = async (e) => {
   } else if (m.type === 'run') { if (running) return; running = true; lastReal = performance.now(); clearTimeout(timer); if (fly) loop(); }   // before init: loop starts once ready; clearTimeout kills a pending reschedule from a paused loop
   else if (m.type === 'pause') { running = false; clearTimeout(timer); }
   else if (m.type === 'speed') speed = m.speed;
+  else if (m.type === 'body') { fly.bodyEnabled = !!m.enabled; if (!fly.bodyEnabled) { fly.flight.active = false; fly.cmd = { v: 0, turn: 0 }; } }
+  else if (m.type === 'sensory_input') { fly.externalSensoryInput = m; }
+  else if (m.type === 'reward' || m.type === 'punish') { fly.lastExternalSignal = { type: m.type, intensity: m.intensity, duration_ms: m.duration_ms, received_at: performance.now() }; }
   else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); }
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
   else if (m.type === 'mode') fly.motor.mode = m.mode;
