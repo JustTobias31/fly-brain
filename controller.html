@@ -28,17 +28,6 @@
       <p class="hint">The brain continues running when the body is disabled. External frames can be sent to POST /input; connecting them to the fly's visual neurons still needs a sensory adapter.</p>
     </section>
     <section>
-      <h2>Build mode</h2>
-      <label class="switch"><span>Pause and edit arena</span><input id="build" type="checkbox"><i></i></label>
-      <div class="buildtools">
-        <button data-place="sugar">＋ Sugar</button>
-        <button data-place="aversive">＋ Aversive</button>
-        <button data-place="cube">＋ Cube</button>
-        <button data-place="remove">− Remove</button>
-      </div>
-      <p class="hint">Choose an item, then click a location in the arena. Leave build mode to resume. New cubes are visual immediately; their collision geometry is loaded when a fly is created.</p>
-    </section>
-    <section>
       <h2>Signals</h2>
       <div class="actions"><button id="reward">Reward</button><button id="punish">Punish</button></div>
       <label>Intensity <input id="intensity" type="range" min="0" max="10" step=".1" value="1"><output id="intensityValue">1.0</output></label>
