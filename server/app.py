@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import math
 import os
 import time
 from collections import defaultdict
@@ -46,10 +47,12 @@ class SensoryInput(BaseModel):
     duration_ms: int = Field(default=100, ge=1, le=60000)
 
 
-async def broadcast(message: dict[str, Any]) -> int:
+async def broadcast(message: dict[str, Any], exclude: WebSocket | None = None) -> int:
     stale = []
     delivered = 0
     for ws in tuple(clients):
+        if ws is exclude:
+            continue
         try:
             await ws.send_json(message)
             delivered += 1
@@ -211,6 +214,37 @@ async def websocket_endpoint(ws: WebSocket):
                     "type": kind, "kind": message.get("kind"),
                     "x": x, "y": y, "timestamp": time.time(),
                 })
+            elif kind == "arena:size":
+                try:
+                    radius = float(message.get("radius"))
+                except (TypeError, ValueError):
+                    await ws.send_json({"type": "error", "error": "radius must be a number"})
+                    continue
+                if not math.isfinite(radius) or not 2 <= radius <= 50:
+                    await ws.send_json({"type": "error", "error": "radius must be between 2 and 50"})
+                    continue
+                await broadcast({"type": "arena:size", "radius": radius, "timestamp": time.time()}, exclude=ws)
+            elif kind in ("fly:pose:start", "fly:pose:end"):
+                fly_id = message.get("id")
+                if not isinstance(fly_id, int) or fly_id < 0:
+                    await ws.send_json({"type": "error", "error": "id must be a non-negative integer"})
+                    continue
+                await broadcast({"type": kind, "id": fly_id, "timestamp": time.time()}, exclude=ws)
+            elif kind == "fly:pose":
+                fly_id = message.get("id")
+                position, quaternion = message.get("position"), message.get("quaternion")
+                valid_vector = lambda values, size: isinstance(values, list) and len(values) == size and all(isinstance(v, (int, float)) and math.isfinite(float(v)) for v in values)
+                if not isinstance(fly_id, int) or fly_id < 0 or not valid_vector(position, 3) or not valid_vector(quaternion, 4):
+                    await ws.send_json({"type": "error", "error": "fly:pose requires a non-negative id, position[3], and quaternion[4]"})
+                    continue
+                position = [float(v) for v in position]
+                quaternion = [float(v) for v in quaternion]
+                norm = math.sqrt(sum(v * v for v in quaternion))
+                if norm < 1e-8:
+                    await ws.send_json({"type": "error", "error": "quaternion must not be zero"})
+                    continue
+                quaternion = [v / norm for v in quaternion]
+                await broadcast({"type": "fly:pose", "id": fly_id, "position": position, "quaternion": quaternion, "timestamp": time.time()}, exclude=ws)
             elif kind == "vision:frame":
                 now = time.monotonic()
                 if now - vision_last_frame < 0.075:
