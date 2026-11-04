@@ -25,7 +25,7 @@
       <label class="switch"><span>Body enabled</span><input id="body" type="checkbox" checked><i></i></label>
       <label class="switch"><span>WebSocket API</span><input id="websocket" type="checkbox"><i></i></label>
       <label class="switch"><span>External vision stream</span><input id="externalVision" type="checkbox"><i></i></label>
-      <p class="hint">The brain continues running when the body is disabled. External vision input is accepted through the sensory API.</p>
+      <p class="hint">The brain continues running when the body is disabled. External frames can be sent to POST /input; connecting them to the fly's visual neurons still needs a sensory adapter.</p>
     </section>
     <section>
       <h2>Build mode</h2>
@@ -36,7 +36,7 @@
         <button data-place="cube">＋ Cube</button>
         <button data-place="remove">− Remove</button>
       </div>
-      <p class="hint">Choose an item, then click a location in the arena. Leave build mode to resume.</p>
+      <p class="hint">Choose an item, then click a location in the arena. Leave build mode to resume. New cubes are visual immediately; their collision geometry is loaded when a fly is created.</p>
     </section>
     <section>
       <h2>Signals</h2>
