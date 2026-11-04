@@ -163,7 +163,7 @@ function buildScene(data) {
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
 }
 let pd = null;
-let controllerView = 'arena', controllerBuild = false, controllerBody = true, controllerVisionSource = 'arena';
+let controllerView = 'arena', controllerBody = true, controllerVisionSource = 'arena';
 function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
 function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
@@ -297,7 +297,6 @@ function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
   for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
-  if (window.parent !== window && !controllerBuild) return;
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
   if (tool === 'remove') { const candidates = [...env.food.map((o,i)=>({kind:'food',o,i})), ...env.bitterPatches.map((o,i)=>({kind:'bitter',o,i})), ...env.obstacles.map((o,i)=>({kind:'obstacle',o,i}))]; let best=null, dist=Infinity; for (const c of candidates) { const d=Math.hypot(c.o.x-p.x,c.o.y-p.y); if(d<dist){dist=d;best=c;} } if(best&&dist<0.5){ const key=best.kind==='food'?'food':best.kind==='bitter'?'bitterPatches':'obstacles'; env[key].splice(best.i,1); } }
@@ -498,13 +497,6 @@ window.addEventListener('message', e => {
   } else if (m.type === 'controller:body') {
     controllerBody = !!m.enabled;
     for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; }
-  } else if (m.type === 'controller:build') {
-    controllerBuild = !!m.enabled;
-    if (controllerBuild) { running = false; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'pause' }); }
-    else { running = true; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'run' }); }
-    const play = $('#play'); if (play) play.textContent = running ? '❚❚ Pause' : '▶ Run';
-  } else if (m.type === 'controller:tool') {
-    tool = ({ sugar: 'food', aversive: 'bitter', cube: 'obstacle', remove: 'remove' })[m.tool] || 'none';
   } else if (m.type === 'controller:vision-source') {
     controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
     if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external frame via POST /input.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
