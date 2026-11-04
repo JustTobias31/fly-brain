@@ -40,8 +40,8 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
     const walls = [
       [a.radius, t, 0, a.radius, h / 2, 0],
       [a.radius, t, 0, -a.radius, h / 2, 0],
-      [t, a.radius, 0, 0, a.radius, Math.PI / 2],
-      [t, a.radius, 0, 0, -a.radius, Math.PI / 2],
+      [t, a.radius, 0, a.radius, 0, 0],
+      [t, a.radius, 0, -a.radius, 0, 0],
     ];
     walls.forEach(([sx, sy, , x, y, yaw], k) => parts.push(`<geom name="wall${k}" type="box" size="${sx} ${sy} ${h / 2}" pos="${x} ${y} ${h / 2}" euler="0 0 ${yaw}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${friction}"/>`));
   } else if (a.walls !== false) for (let k = 0; k < n; k++) {
