@@ -2,7 +2,7 @@
 // obstacles and food discs, and kinematic (mocap) proxies standing in for the other flies.
 // Units follow flybody: cm, g, s. The floor is z = 0; a standing fly's thorax sits at z ~ 0.13.
 export const DEFAULT_ENV = {
-  arena: { radius: 2.5, wallHeight: 1.2, segments: 48, wallFriction: 1 },    // head/body grip walls; legs slide along them (see buildWorldXML); tall enough to fly in
+  arena: { radius: 2.5, wallHeight: 1.2, segments: 48, wallFriction: 1, walls: true },    // head/body grip walls; legs slide along them (see buildWorldXML); tall enough to fly in
   food: [
     { x: 1.0, y: 0.6, r: 0.25, sugar: 1.0, bitter: 0, water: 0.2, amount: 5 },
   ],
@@ -17,6 +17,7 @@ export const DEFAULT_ENV = {
 
 // Environment presets ("different environments to play and survive in")
 export const PRESETS = {
+  empty: { label: 'Empty', flies: 1, env: () => ({ arena: { radius: 20, wallHeight: 0, segments: 0, wallFriction: 1, walls: false, shape: 'square' }, food: [], bitterPatches: [], odors: [], obstacles: [], hazards: [], light: { sky: 1.0, sun: [0.3, 0.2, 1.0] }, wind: [0, 0], threat: null }) },
   foraging: { label: 'Foraging arena', env: () => structuredClone(DEFAULT_ENV), flies: 1 },
   openfield: { label: 'Open field, scattered food', flies: 3, env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [], bitterPatches: [{ x: 0, y: -1.4, r: 0.3, bitter: 1 }],
     food: [[1.4, 0.9], [-1.5, 0.8], [0.2, 1.8], [-0.6, -1.6], [1.6, -1.1]].map(([x, y]) => ({ x, y, r: 0.2, sugar: 1, bitter: 0, water: 0.2, amount: 3 })),
@@ -34,7 +35,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
   parts.push(`<geom name="floor" type="plane" size="${a.radius + 1} ${a.radius + 1} .1" rgba=".55 .5 .42 1" friction="1" solref="0.0002 1" group="0"/>`);
   // circular wall from box segments
   const n = a.segments, t = 0.05;
-  for (let k = 0; k < n; k++) {
+  if (a.walls !== false) for (let k = 0; k < n; k++) {
     const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
     const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
     parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
