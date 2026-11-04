@@ -42,7 +42,7 @@ onmessage = async (e) => {
   }
   else if (m.type === 'external_vision_stop') { fly?.fv?.clearExternalFrame(); }
   else if (m.type === 'reward' || m.type === 'punish') { if (fly) fly.lastExternalSignal = { type: m.type, intensity: m.intensity, duration_ms: m.duration_ms, received_at: performance.now() }; }
-  else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); }
+  else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); fly.syncObstacles(); }
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
   else if (m.type === 'mode') fly.motor.mode = m.mode;
   else if (m.type === 'scaffolds') fly.setScaffolds(m.scaffolds);
