@@ -29,6 +29,9 @@ WebSocket messages from the simulation client:
 - `neuron:fire`: `{"type":"neuron:fire","id":123,"rate":100,"duration_ms":20}`
 - `arena:place`: `{"type":"arena:place","kind":"sugar","x":0.5,"y":-0.2}` (kind: `sugar`, `aversive`, or `cube`)
 - `arena:remove`: `{"type":"arena:remove","x":0.5,"y":-0.2}`
+- `arena:size`: `{"type":"arena:size","radius":20}` (square baseplate half-width; accepted range 2–50)
+- `fly:pose:start` / `fly:pose:end`: pause/resume controller simulations around a remote transform drag, with `id`
+- `fly:pose`: `{"type":"fly:pose","id":0,"position":[0,0,0.132],"quaternion":[0,0,0,1]}` (position in world coordinates; quaternion is x/y/z/w)
 - `reward`, `punish`, and `sensory_input` can also be sent over the WebSocket; they are broadcast to connected controller clients.
 - `vision:frame`: `{"type":"vision:frame","width":160,"height":90,"pixels":"<base64 grayscale bytes>","image":"data:image/jpeg;base64,..."}`. Pixel data must contain exactly `width * height` bytes; dimensions are limited to 320×180 and frames are rate-limited. `vision:stop` restores arena raycast vision.
 
