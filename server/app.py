@@ -6,7 +6,7 @@ import time
 from collections import defaultdict
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -104,7 +104,7 @@ async def sensory_input(data: SensoryInput):
 
 
 @app.get("/neurons")
-async def get_neurons(x_neuron_id: str | None = Header(default=None, alias="X-Neuron-ID")):
+async def get_neurons(x_neuron_id: str | None = Header(default=None, alias="X-Neuron-ID"), offset: int = Query(default=0, ge=0), limit: int = Query(default=1000, ge=1, le=10000)):
     if x_neuron_id is not None:
         try:
             neuron_id = int(x_neuron_id)
@@ -114,7 +114,8 @@ async def get_neurons(x_neuron_id: str | None = Header(default=None, alias="X-Ne
         if neuron is None:
             raise HTTPException(status_code=404, detail=f"Neuron {neuron_id} is not registered")
         return neuron
-    return {"count": len(neurons), "neurons": list(neurons.values()), "activity_updated_at": latest_state["updated_at"]}
+    items = list(neurons.values())
+    return {"count": len(items), "offset": offset, "limit": limit, "neurons": items[offset:offset + limit], "activity_updated_at": latest_state["updated_at"]}
 
 
 @app.get("/state")
