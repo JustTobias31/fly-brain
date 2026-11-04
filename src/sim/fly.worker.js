@@ -23,6 +23,7 @@ onmessage = async (e) => {
     const flyvis = eyes ? { eyes, map: m.flyvisMap, gain: 150, vRest: gpuEyes?.vRest } : null;
     fly = new FlyAgent({ brain, flyvis, mj, flyXML: m.flyXML, env, data, size: g.size, sign: g.sign, bodymap: m.bodymap, gait: m.gait, id: m.id,
       pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex });
+    bodyEnabled = m.bodyEnabled !== false;
     fly.bodyEnabled = bodyEnabled;
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
