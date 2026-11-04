@@ -20,12 +20,18 @@
   <iframe id="simulation" src="/arena.html" title="Fly simulation"></iframe>
   <aside class="controls">
     <section>
-      <h2>Simulation</h2>
-      <div class="actions"><button id="run" class="primary">Run simulation</button><button id="resetView">Reset view</button></div>
+      <h2>Controls</h2>
+      <div class="actions"><button id="resetView">Reset view</button></div>
+      <label class="field">Fly gizmo <select id="gizmoMode"><option value="translate">Move</option><option value="rotate">Rotate</option></select></label>
+      <label class="field">Baseplate size <input id="arenaSize" type="range" min="2" max="50" step="1" value="20"><output id="arenaSizeValue">20</output></label>
       <label class="switch"><span>Body enabled</span><input id="body" type="checkbox" checked><i></i></label>
       <label class="switch"><span>WebSocket API</span><input id="websocket" type="checkbox"><i></i></label>
       <label class="switch"><span>External vision stream</span><input id="externalVision" type="checkbox"><i></i></label>
       <p class="hint">The brain keeps running with the body disabled. Enable external vision to choose a screen, window, or browser tab; its image replaces the fly's arena vision.</p>
+    </section>
+    <section>
+      <h2>Elements</h2>
+      <div id="elements" class="elements"><p class="hint">Loading elements…</p></div>
     </section>
     <section>
       <h2>Signals</h2>
