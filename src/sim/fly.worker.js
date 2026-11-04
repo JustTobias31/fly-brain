@@ -35,6 +35,10 @@ onmessage = async (e) => {
   else if (m.type === 'speed') speed = m.speed;
   else if (m.type === 'body') { bodyEnabled = !!m.enabled; if (fly) { fly.bodyEnabled = bodyEnabled; if (!bodyEnabled) { fly.flight.active = false; fly.cmd = { v: 0, turn: 0 }; } } }
   else if (m.type === 'sensory_input') { if (fly) fly.externalSensoryInput = m; }
+  else if (m.type === 'external_vision_frame' && fly?.fv && typeof m.pixels === 'string') {
+    try { const raw = atob(m.pixels), pixels = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) pixels[i] = raw.charCodeAt(i); fly.fv.setExternalFrame({ width: m.width, height: m.height, pixels }); } catch {}
+  }
+  else if (m.type === 'external_vision_stop') { fly?.fv?.clearExternalFrame(); }
   else if (m.type === 'reward' || m.type === 'punish') { if (fly) fly.lastExternalSignal = { type: m.type, intensity: m.intensity, duration_ms: m.duration_ms, received_at: performance.now() }; }
   else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); }
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
