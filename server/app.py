@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import os
 import time
 from collections import defaultdict
@@ -128,6 +130,7 @@ async def get_state():
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     clients.add(ws)
+    vision_last_frame = 0.0
     try:
         await ws.send_json({"type": "connected", "registered_neurons": len(neurons)})
         while True:
@@ -208,6 +211,29 @@ async def websocket_endpoint(ws: WebSocket):
                     "type": kind, "kind": message.get("kind"),
                     "x": x, "y": y, "timestamp": time.time(),
                 })
+            elif kind == "vision:frame":
+                now = time.monotonic()
+                if now - vision_last_frame < 0.075:
+                    continue
+                width, height, pixels = message.get("width"), message.get("height"), message.get("pixels")
+                if not isinstance(width, int) or not isinstance(height, int) or not (1 <= width <= 320 and 1 <= height <= 180) or not isinstance(pixels, str) or len(pixels) > 100000:
+                    await ws.send_json({"type": "error", "error": "Invalid vision frame dimensions or pixel data"})
+                    continue
+                try:
+                    decoded = base64.b64decode(pixels, validate=True)
+                except (binascii.Error, ValueError):
+                    await ws.send_json({"type": "error", "error": "Vision pixels must be base64 encoded"})
+                    continue
+                if len(decoded) != width * height:
+                    await ws.send_json({"type": "error", "error": "Vision pixel count does not match frame dimensions"})
+                    continue
+                image = message.get("image")
+                if not isinstance(image, str) or not image.startswith("data:image/jpeg;base64,") or len(image) > 250000:
+                    image = None
+                vision_last_frame = now
+                await broadcast({"type": "vision:frame", "width": width, "height": height, "pixels": pixels, "image": image, "timestamp": time.time()})
+            elif kind == "vision:stop":
+                await broadcast({"type": "vision:stop", "timestamp": time.time()})
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
             else:
