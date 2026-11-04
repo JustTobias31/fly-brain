@@ -1,14 +1,14 @@
 const frame=document.querySelector("#simulation"), statusDot=document.querySelector("#connection"),statusText=document.querySelector("#connectionText"),log=document.querySelector("#apiLog");
-let socket=null, running=true, selectedTool=null, latestBody=null, latestActivity=null, pendingMetadata=[];
+let socket=null, running=false, selectedTool=null, latestBody=null, latestActivity=null, pendingMetadata=[];
 const send=(type,data={})=>frame.contentWindow?.postMessage({source:"fly-controller",type,...data},"*");
 const logLine=s=>{log.textContent=(s+"\n"+log.textContent).slice(0,3500)};
 function setView(view){document.querySelectorAll("[data-view]").forEach(b=>b.classList.toggle("active",b.dataset.view===view));send("controller:view",{view})}
 document.querySelectorAll("[data-view]").forEach(b=>b.onclick=()=>setView(b.dataset.view));
-document.querySelector("#run").onclick=()=>{running=!running;send(running?"controller:run":"controller:pause");document.querySelector("#run").textContent=running?"Pause simulation":"Run simulation"};
+document.querySelector("#run").onclick=()=>{if(document.querySelector("#build").checked)return;running=!running;send(running?"controller:run":"controller:pause");document.querySelector("#run").textContent=running?"Pause simulation":"Run simulation"};
 document.querySelector("#resetView").onclick=()=>send("controller:reset-view");
 document.querySelector("#body").onchange=e=>send("controller:body",{enabled:e.target.checked});
 document.querySelector("#externalVision").onchange=e=>send("controller:vision-source",{source:e.target.checked?"external":"arena"});
-document.querySelector("#build").onchange=e=>{send("controller:build",{enabled:e.target.checked});if(e.target.checked)running=false};
+document.querySelector("#build").onchange=e=>{send("controller:build",{enabled:e.target.checked});running=!e.target.checked;document.querySelector("#run").textContent=running?"Pause simulation":"Run simulation";document.querySelector("#run").disabled=e.target.checked};
 document.querySelectorAll("[data-place]").forEach(b=>b.onclick=()=>{selectedTool=b.dataset.place;document.querySelectorAll("[data-place]").forEach(x=>x.classList.toggle("active",x===b));send("controller:tool",{tool:selectedTool})});
 document.querySelector("#intensity").oninput=e=>document.querySelector("#intensityValue").value=Number(e.target.value).toFixed(1);
 async function postSignal(path){const base=document.querySelector("#api").value.replace(/\/$/,"");try{const res=await fetch(base+"/"+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({intensity:Number(document.querySelector("#intensity").value),duration_ms:100})});const data=await res.json();logLine(path+": "+JSON.stringify(data))}catch(e){logLine("API error: "+e.message)}}
