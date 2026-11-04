@@ -47,7 +47,7 @@ async function main() {
   if (!crossOriginIsolated) console.warn('not cross-origin isolated: SharedArrayBuffer unavailable');
   const data = await loadConnectome(status);
   meta = data.meta;
-  if (window.parent !== window) { for (let start = 0; start < meta.types.length; start += 1000) { const neurons = []; for (let id = start; id < Math.min(start + 1000, meta.types.length); id++) neurons.push({ id, name: meta.types[id], type: meta.types[id] }); window.parent.postMessage({ source: 'fly-arena', type: 'neuron-metadata', neurons }, '*'); } }
+  if (window.parent !== window) { for (let start = 0; start < meta.types.length; start += 1000) { const neurons = []; for (let id = start; id < Math.min(start + 1000, meta.types.length); id++) const p = id * 3; neurons.push({ id, name: meta.types[id], type: meta.types[id], side: data.side[id], superclass: data.superclass[id], position: [data.soma[p], data.soma[p + 1], data.soma[p + 2]] }); window.parent.postMessage({ source: 'fly-arena', type: 'neuron-metadata', neurons }, '*'); } }
   status('loading body model');
   const [bm, xml, g, blender, levels, output, sz, sg, bp, wasmBytes, fvb, fvj, fvi, fvm, nmc, detail, reaf] = await Promise.all([
     fetch(`${BASE}data/bodymap.json`).then(r => r.json()), fetch(`${BASE}body/fly_physics.xml`).then(r => r.text()), fetch(`${BASE}body/gait.json`).then(r => r.json()),
@@ -305,7 +305,7 @@ function onClick(e) {
   if (tool === 'co2') env.odors.push({ x: p.x, y: p.y, odor: 'co2', strength: 1, sigma: 0.8 });
   if (tool === 'bitter') env.bitterPatches.push({ x: p.x, y: p.y, r: 0.25, bitter: 1 });
   if (tool === 'hazard') env.hazards.push({ x: p.x, y: p.y, r: 0.3, heat: 1 });
-  if (tool === 'obstacle') { alert('Obstacles change the physics world; they apply to flies added after this point.'); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
+  if (tool === 'obstacle') { if (window.parent === window) alert('Obstacles change the physics world; they apply to flies added after this point.'); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
   rebuildEnv(); syncEnv();
 }
 function renderFlyList() {
