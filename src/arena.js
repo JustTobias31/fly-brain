@@ -118,7 +118,7 @@ function buildScene(data) {
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
   camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
-  controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
+  controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5; camera.far = Math.max(100, env.arena.radius * 8); camera.updateProjectionMatrix();
   transformControls = new TransformControls(camera, renderer.domElement); transformControls.setMode('translate'); transformControls.size = 0.75;
   poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
   transformControls.addEventListener('dragging-changed', e => {
@@ -307,7 +307,7 @@ function deleteElement(kind, index) {
 function setArenaRadius(radius) {
   radius = Math.max(2, Math.min(50, Number(radius)));
   if (!Number.isFinite(radius)) return;
-  env.arena.radius = radius; rebuildEnv(); controls.maxDistance = radius * 5;
+  env.arena.radius = radius; rebuildEnv(); controls.maxDistance = radius * 5; camera.far = Math.max(100, radius * 8); camera.updateProjectionMatrix();
   for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'arena:size', radius });
   if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'arena-config', radius }, '*');
 }
@@ -319,7 +319,7 @@ function syncPoseGizmo(f) {
   poseGizmo.quaternion.set(qv[q + 1], qv[q + 2], qv[q + 3], qv[q]);
 }
 function attachPoseGizmo() {
-  const f = flies.find(x => x.id === selected && x.ready);
+  const f = controllerBody ? flies.find(x => x.id === selected && x.ready) : null;
   if (!f) { transformControls.detach(); poseGizmo.visible = false; gizmoFlyId = -1; return; }
   gizmoFlyId = f.id; syncPoseGizmo(f); poseGizmo.visible = true; transformControls.attach(poseGizmo);
 }
@@ -571,7 +571,7 @@ window.addEventListener('message', e => {
     for (const f of flies) if (f.ready) f.worker.postMessage({ type: running ? 'run' : 'pause' });
   } else if (m.type === 'controller:body') {
     controllerBody = !!m.enabled;
-    for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; }
+    for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; } attachPoseGizmo();
   } else if (m.type === 'controller:vision-source') {
     controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
     if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external screen share.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
