@@ -229,7 +229,7 @@ export class FlyAgent {
   
     }
     this.t += 1;
-    this.physiology(st);
+    if (this.bodyEnabled) this.physiology(st);
   }
   physiology(st) {
     const dt = 0.001;
