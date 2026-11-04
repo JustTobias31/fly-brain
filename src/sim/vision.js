@@ -28,6 +28,7 @@ export class FlyVisionFV {
         this.photo.push(i); this.photoCol.push(s * this.nCol + best); }); }
     this.adapt = new Float32Array(this.photo.length).fill(NaN);
     this.lumEye = [new Float32Array(this.nCol), new Float32Array(this.nCol)];
+    this.externalFrame = null;
     // resting activity of every model node under a uniform grey field: neurons are driven by deviations from rest
     const grey = new Float32Array(this.nCol).fill(0.5);
     if (vRest) {
@@ -42,7 +43,7 @@ export class FlyVisionFV {
     this.settled = false;
   }
   /** let the optic-lobe state settle to the current scene (avoids an onset transient) */
-  settle(env, albedo, steps = 50) { this.sample(env, albedo); for (let s = 0; s < 2; s++) { this.eyes[s].setInput(this.lumEye[s]); for (let k = 0; k < steps; k++) this.eyes[s].step(); } this.settled = true; }
+  settle(env, albedo, steps = 50) { if (this.externalFrame) this.sampleExternal(); else this.sample(env, albedo); for (let s = 0; s < 2; s++) { this.eyes[s].setInput(this.lumEye[s]); for (let k = 0; k < steps; k++) this.eyes[s].step(); } this.settled = true; }
   sample(env, albedo) {
     const { mj, model, data, n, dHead, vec } = this; const h = this.head;
     const R = data.xmat.slice(h * 9, h * 9 + 9), o = [data.xpos[h * 3], data.xpos[h * 3 + 1], data.xpos[h * 3 + 2]];
@@ -57,10 +58,30 @@ export class FlyVisionFV {
     }
     this.lumEye[0].set(this.lum.subarray(0, this.nCol)); this.lumEye[1].set(this.lum.subarray(this.nCol));
   }
+  setExternalFrame(frame) {
+    if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || !(frame.pixels instanceof Uint8Array) || frame.width < 1 || frame.height < 1 || frame.pixels.length !== frame.width * frame.height) return;
+    this.externalFrame = { width: frame.width, height: frame.height, pixels: frame.pixels };
+    this.settled = false;
+  }
+  clearExternalFrame() { this.externalFrame = null; this.settled = false; }
+  sampleExternal() {
+    const { width, height, pixels } = this.externalFrame;
+    const maxAz = Math.PI / 2, maxEl = Math.PI / 3;
+    for (let r = 0; r < this.n; r++) {
+      const x = this.dHead[r * 3], y = this.dHead[r * 3 + 1], z = this.dHead[r * 3 + 2];
+      const az = Math.atan2(y, x), el = Math.asin(Math.max(-1, Math.min(1, z)));
+      const u = Math.max(0, Math.min(1, 0.5 + az / (2 * maxAz)));
+      const v = Math.max(0, Math.min(1, 0.5 - el / (2 * maxEl)));
+      const px = Math.round(u * (width - 1)), py = Math.round(v * (height - 1));
+      this.lum[r] = pixels[py * width + px] / 255;
+    }
+    this.lumEye[0].set(this.lum.subarray(0, this.nCol));
+    this.lumEye[1].set(this.lum.subarray(this.nCol));
+  }
   /** advance the optic-lobe models by 20 ms and emit rates via set(ixArray, hz) */
   update(set, env, albedo, dtMs) {
     if (!this.settled) this.settle(env, albedo);
-    this.sample(env, albedo);
+    if (this.externalFrame) this.sampleExternal(); else this.sample(env, albedo);
     for (let s = 0; s < 2; s++) { this.eyes[s].setInput(this.lumEye[s]); this.eyes[s].step(); }
     const g = this.gain;
     for (let s = 0; s < 2; s++) { const v = this.eyes[s].v, P = this.pairs[s]; const one = [0];
