@@ -159,6 +159,48 @@ async def websocket_endpoint(ws: WebSocket):
                     "activity": message.get("activity", latest_state["activity"]),
                     "updated_at": time.time(),
                 })
+            elif kind in ("reward", "punish"):
+                await broadcast({
+                    "type": kind,
+                    "intensity": max(0.0, min(100.0, float(message.get("intensity", 1.0)))),
+                    "duration_ms": max(1, min(60000, int(message.get("duration_ms", 100)))),
+                    "timestamp": time.time(),
+                })
+            elif kind == "sensory_input":
+                modality = message.get("modality", "other")
+                if modality not in {"vision", "olfaction", "gustation", "mechanosensation", "temperature", "other"}:
+                    await ws.send_json({"type": "error", "error": "Unsupported sensory modality"})
+                    continue
+                await broadcast({
+                    "type": "sensory_input", "modality": modality,
+                    "values": message.get("values", {}),
+                    "duration_ms": max(1, min(60000, int(message.get("duration_ms", 100)))),
+                    "timestamp": time.time(),
+                })
+            elif kind == "neuron:fire":
+                neuron_id = message.get("id")
+                if not isinstance(neuron_id, int) or neuron_id < 0:
+                    await ws.send_json({"type": "error", "error": "id must be a non-negative integer"})
+                    continue
+                await broadcast({
+                    "type": "neuron:fire", "id": neuron_id,
+                    "rate": max(0.0, min(1000.0, float(message.get("rate", 100.0)))),
+                    "duration_ms": max(1, min(60000, int(message.get("duration_ms", 20)))),
+                    "timestamp": time.time(),
+                })
+            elif kind in ("arena:place", "arena:remove"):
+                if kind == "arena:place" and message.get("kind") not in {"sugar", "aversive", "cube"}:
+                    await ws.send_json({"type": "error", "error": "kind must be sugar, aversive, or cube"})
+                    continue
+                try:
+                    x, y = float(message.get("x", 0)), float(message.get("y", 0))
+                except (TypeError, ValueError):
+                    await ws.send_json({"type": "error", "error": "x and y must be numbers"})
+                    continue
+                await broadcast({
+                    "type": kind, "kind": message.get("kind"),
+                    "x": x, "y": y, "timestamp": time.time(),
+                })
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
             else:
