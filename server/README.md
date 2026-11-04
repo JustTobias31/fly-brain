@@ -35,6 +35,8 @@ WebSocket messages from the simulation client:
 - `reward`, `punish`, and `sensory_input` can also be sent over the WebSocket; they are broadcast to connected controller clients.
 - `vision:frame`: `{"type":"vision:frame","width":160,"height":90,"pixels":"<base64 grayscale bytes>","image":"data:image/jpeg;base64,..."}`. Pixel data must contain exactly `width * height` bytes; dimensions are limited to 320×180 and frames are rate-limited. `vision:stop` restores arena raycast vision.
 
+The controller starts the simulation automatically. Select a fly in the Arena view to attach the Move/Rotate gizmo. Dragging pauses the simulation and resumes it when released (if it was running). Baseplate size updates the square boundary and the live MuJoCo walls/floor. The Elements list in the controller has a Delete action for each item.
+
 Neuron listing is paginated: `GET /neurons?offset=0&limit=1000`. A single neuron can be fetched with the `X-Neuron-ID` header.
 
 HTTP signal requests are broadcast to connected WebSocket clients. The browser
