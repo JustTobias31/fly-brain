@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -39,7 +40,7 @@ const FLY_CAP = Math.min(MAX_FLIES, Math.max(1, Math.floor(Number(new URLSearchP
 const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(location.search).get('vision') || '').toLowerCase());
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
-let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
+let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -82,7 +83,7 @@ async function main() {
   buildBrainPanel(data);
   buildScene(data);
   buildUI();
-  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'ready' }, '*');
+  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'ready', arenaRadius: env.arena.radius }, '*');
   $('#loading').remove();
   const st0 = PRESET.start || [0, 0, 0];
   if (PRESET.flySpots) for (const s of PRESET.flySpots.slice(0, FLY_CAP)) await addFly(s.pos, s.yaw, s.sex);
@@ -94,7 +95,8 @@ async function main() {
 }
 
 // ---------------- scene ----------------
-let renderer, scene, camera, controls, envGroup, raycaster, floorMesh, sun, composer, gtao, resolution;
+let renderer, scene, camera, controls, transformControls, poseGizmo, envGroup, raycaster, floorMesh, sun, composer, gtao, resolution;
+let gizmoDragging = false, resumeAfterGizmo = false, gizmoFlyId = -1;
 let shadowDirty = true, lastShadow = -Infinity, shadowExtent = 0, lastBrainDraw = 0, brainDirty = true;
 let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
@@ -117,6 +119,21 @@ function buildScene(data) {
   camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5;
+  transformControls = new TransformControls(camera, renderer.domElement); transformControls.setMode('translate'); transformControls.size = 0.75;
+  poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
+  transformControls.addEventListener('dragging-changed', e => {
+    controls.enabled = !e.value;
+    if (e.value) { gizmoDragging = true; resumeAfterGizmo = running; if (running) { running = false; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'pause' }); }
+      if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: true, id: gizmoFlyId }, '*');
+    } else { gizmoDragging = false; if (resumeAfterGizmo) { running = true; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'run' }); } resumeAfterGizmo = false;
+      if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: false, id: gizmoFlyId }, '*'); }
+  });
+  transformControls.addEventListener('objectChange', () => {
+    const f = flies.find(x => x.id === gizmoFlyId); if (!f?.ready) return;
+    const position = poseGizmo.position.toArray(), quaternion = [poseGizmo.quaternion.x, poseGizmo.quaternion.y, poseGizmo.quaternion.z, poseGizmo.quaternion.w];
+    f.worker.postMessage({ type: 'set_pose', position, quaternion });
+    if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose', id: f.id, position, quaternion }, '*');
+  });
   scene.add(new THREE.HemisphereLight('#f4f2ed', '#514432', 0.22));
   sun = new THREE.DirectionalLight('#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.00002; sun.shadow.normalBias = 0.0003; sun.shadow.radius = 2;
@@ -143,6 +160,7 @@ function buildScene(data) {
   }
   addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
   envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
+  if (window.parent !== window) $('#panel').hidden = true;
   batches = new ArenaBatches(scene, visual, FLY_CAP);
   raycaster = new THREE.Raycaster();
   renderer.domElement.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
@@ -162,7 +180,7 @@ function buildScene(data) {
   hlPts.visible = false; brainScene.add(hlPts);
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
 }
-let pd = null;
+let pd = null, remotePoseResume = false;
 let controllerView = 'arena', controllerBody = true, controllerVisionSource = 'arena';
 function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
 function rebuildEnv() {
@@ -176,12 +194,22 @@ function rebuildEnv() {
   const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set((R + 0.2) * 2 / 0.8, (R + 0.2) * 2 / 0.8); tex.magFilter = THREE.LinearFilter; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); tex.colorSpace = THREE.SRGBColorSpace;
   floorMesh = new THREE.Mesh(env.arena.shape === 'square' ? new THREE.PlaneGeometry(R * 2, R * 2) : new THREE.CircleGeometry(R + 0.1, 96), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
   floorMesh.receiveShadow = true; envGroup.add(floorMesh);
-  // striped wall (24 stripes), matching the visual environment used for the compound eye
-  if (env.arena.walls !== false) { const wc = document.createElement('canvas'); wc.width = 1024; wc.height = 8; const wx = wc.getContext('2d');
-  for (let k = 0; k < 24; k++) { wx.fillStyle = (k & 1) ? '#c9c9cf' : '#2a2a2e'; wx.fillRect(k * 1024 / 24, 0, 1024 / 24 + 1, 8); }
-  const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, env.arena.wallHeight, 96, 1, true), new THREE.MeshStandardMaterial({ map: wt, side: THREE.BackSide, roughness: 0.9 }));
-  wall.rotation.x = Math.PI / 2; wall.position.z = env.arena.wallHeight / 2; envGroup.add(wall); }
+  // striped boundary walls, square for the editable baseplate and circular for other presets
+  if (env.arena.walls !== false) {
+    const wc = document.createElement('canvas'); wc.width = 1024; wc.height = 8; const wx = wc.getContext('2d');
+    for (let k = 0; k < 24; k++) { wx.fillStyle = (k & 1) ? '#c9c9cf' : '#2a2a2e'; wx.fillRect(k * 1024 / 24, 0, 1024 / 24 + 1, 8); }
+    const wt = new THREE.CanvasTexture(wc); wt.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.MeshStandardMaterial({ map: wt, roughness: 0.9, side: THREE.DoubleSide });
+    const h = env.arena.wallHeight;
+    if (env.arena.shape === 'square') {
+      for (const [w, d, x, y] of [[R * 2, 0.1, 0, R], [R * 2, 0.1, 0, -R], [0.1, R * 2, R, 0], [0.1, R * 2, -R, 0]]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(w, d, h), mat); wall.position.set(x, y, h / 2); wall.castShadow = wall.receiveShadow = true; envGroup.add(wall);
+      }
+    } else {
+      const wall = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.05, R + 0.05, h, 96, 1, true), mat);
+      wall.rotation.x = Math.PI / 2; wall.position.z = h / 2; envGroup.add(wall);
+    }
+  }
   for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: '#3d4a3d', roughness: 0.7 }));
     if (o.type !== 'box') m.rotation.x = Math.PI / 2; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
   for (const f of env.food) { const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m); }
@@ -192,6 +220,7 @@ function rebuildEnv() {
     const col = o.odor === 'co2' ? '120,200,255' : '190,255,120'; grd.addColorStop(0, `rgba(${col},0.45)`); grd.addColorStop(1, `rgba(${col},0)`); gx.fillStyle = grd; gx.fillRect(0, 0, 128, 128);
     const m = new THREE.Mesh(new THREE.CircleGeometry(o.sigma * 2.2, 48), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(g), transparent: true, depthWrite: false }));
     m.position.set(o.x, o.y, 0.004); envGroup.add(m); }
+  postElements();
 }
 function buildFlyMesh(color, sex) {
   const appearance = visual.instantiate(sex);
@@ -260,9 +289,42 @@ function broadcastOthers() {
 }
 function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'env', env }); }
 
+function postElements() {
+  if (window.parent === window) return;
+  const elements = [];
+  const add = (kind, list, label) => list.forEach((o, index) => elements.push({ kind, index, label, x: o.x, y: o.y }));
+  add('food', env.food, 'Sugar');
+  add('bitterPatches', env.bitterPatches, 'Bitter patch');
+  add('hazards', env.hazards, 'Heat patch');
+  add('obstacles', env.obstacles, 'Block');
+  add('odors', env.odors, 'Odor');
+  window.parent.postMessage({ source: 'fly-arena', type: 'elements', elements }, '*');
+}
+function deleteElement(kind, index) {
+  const list = env[kind]; if (!Array.isArray(list) || !Number.isInteger(index) || !list[index]) return;
+  list.splice(index, 1); rebuildEnv(); syncEnv();
+}
+function setArenaRadius(radius) {
+  radius = Math.max(2, Math.min(50, Number(radius)));
+  if (!Number.isFinite(radius)) return;
+  env.arena.radius = radius; rebuildEnv(); controls.maxDistance = radius * 5;
+  for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'arena:size', radius });
+  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'arena-config', radius }, '*');
+}
+function syncPoseGizmo(f) {
+  if (!transformControls || transformControls.object === null || gizmoFlyId !== f.id) return;
+  const bi = f.bodyNames?.indexOf('thorax') ?? -1; if (bi < 0 || !f.last?.xpos || !f.last?.xquat) return;
+  const p = f.last.xpos, qv = f.last.xquat, b = bi * 3, q = bi * 4;
+  poseGizmo.position.set(p[b], p[b + 1], p[b + 2]);
+  poseGizmo.quaternion.set(qv[q + 1], qv[q + 2], qv[q + 3], qv[q]);
+}
+function attachPoseGizmo() {
+  const f = flies.find(x => x.id === selected && x.ready);
+  if (!f) { transformControls.detach(); poseGizmo.visible = false; gizmoFlyId = -1; return; }
+  gizmoFlyId = f.id; syncPoseGizmo(f); poseGizmo.visible = true; transformControls.attach(poseGizmo);
+}
 // ---------------- UI ----------------
 function buildUI() {
-  $('#play').onclick = () => { running = !running; for (const f of flies) f.worker.postMessage({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
   $('#addFly').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2); };
   $('#addFemale').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2, 'f'); };
   $('#speed').oninput = e => { speed = +e.target.value; $('#speedv').textContent = speed.toFixed(2) + '×'; for (const f of flies) f.worker.postMessage({ type: 'speed', speed }); };
@@ -296,7 +358,7 @@ function buildScaffoldUI() {
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
-  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
+  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); attachPoseGizmo(); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
   if (tool === 'remove') { const candidates = [...env.food.map((o,i)=>({kind:'food',o,i})), ...env.bitterPatches.map((o,i)=>({kind:'bitter',o,i})), ...env.obstacles.map((o,i)=>({kind:'obstacle',o,i}))]; let best=null, dist=Infinity; for (const c of candidates) { const d=Math.hypot(c.o.x-p.x,c.o.y-p.y); if(d<dist){dist=d;best=c;} } if(best&&dist<0.5){ const key=best.kind==='food'?'food':best.kind==='bitter'?'bitterPatches':'obstacles'; env[key].splice(best.i,1); } }
@@ -314,7 +376,7 @@ function renderFlyList() {
     return `<div class="fly ${f.id === selected ? 'sel' : ''}" data-id="${f.id}"><i class="dot" style="background:${f.color}"></i>
       <div>${f.sex === 'f' ? '♀' : '♂'} fly ${f.id} <span style="color:var(--acc)">${s.behavior || ''}</span><div class="bar"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       <span style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`; }).join('');
-  $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); });
+  $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); attachPoseGizmo(); });
   const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
   $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
   $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
@@ -445,6 +507,7 @@ function animate() {
     f.ring.visible = f.id === selected;
   }
   const sf = flies.find(x => x.id === selected);
+  if (!gizmoDragging && sf?.last) syncPoseGizmo(sf);
   if (sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
   updateThreat(); controls.update();
@@ -490,10 +553,20 @@ function animate() {
 window.addEventListener('message', e => {
   if (e.source !== window.parent || e.data?.source !== 'fly-controller') return;
   const m = e.data;
-  if (m.type === 'controller:run' || m.type === 'controller:pause') {
+  if (m.type === 'controller:gizmo-mode') {
+    transformControls.setMode(m.mode === 'rotate' ? 'rotate' : 'translate');
+  } else if (m.type === 'controller:arena-size') {
+    setArenaRadius(m.radius);
+  } else if (m.type === 'controller:element-delete') {
+    deleteElement(m.kind, m.index);
+  } else if (m.type === 'controller:fly-pose') {
+    const f = flies.find(x => x.id === m.id); if (f?.ready) f.worker.postMessage({ type: 'set_pose', position: m.position, quaternion: m.quaternion });
+  } else if (m.type === 'controller:pose-drag') {
+    if (m.active && !gizmoDragging) { remotePoseResume = running; if (running) { running = false; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'pause' }); } }
+    else if (!m.active && remotePoseResume) { running = true; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'run' }); remotePoseResume = false; }
+  } else if (m.type === 'controller:run' || m.type === 'controller:pause') {
     running = m.type === 'controller:run';
     for (const f of flies) if (f.ready) f.worker.postMessage({ type: running ? 'run' : 'pause' });
-    const play = $('#play'); if (play) play.textContent = running ? '❚❚ Pause' : '▶ Run';
   } else if (m.type === 'controller:body') {
     controllerBody = !!m.enabled;
     for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; }
@@ -503,7 +576,7 @@ window.addEventListener('message', e => {
   } else if (m.type === 'controller:view') {
     controllerView = m.view;
     const arena = controllerView === 'arena';
-    $('#panel').hidden = !arena;
+    $('#panel').hidden = true;
     $('#brainpanel').hidden = arena;
     $('#c').style.display = arena ? 'block' : 'none';
     if (!arena) {
