@@ -499,7 +499,7 @@ window.addEventListener('message', e => {
     for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; }
   } else if (m.type === 'controller:vision-source') {
     controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
-    if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external frame via POST /input.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
+    if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external screen share.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
   } else if (m.type === 'controller:view') {
     controllerView = m.view;
     const arena = controllerView === 'arena';
@@ -518,6 +518,20 @@ window.addEventListener('message', e => {
     }
   } else if (m.type === 'controller:reset-view') {
     controls?.reset?.();
+  } else if (m.type === 'api:vision-frame') {
+    const frame = m.frame;
+    if (frame && typeof frame.pixels === 'string') {
+      for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'external_vision_frame', width: frame.width, height: frame.height, pixels: frame.pixels });
+      let preview = $('#externalVisionPreview');
+      if (!preview) { preview = document.createElement('div'); preview.id = 'externalVisionPreview'; preview.style.cssText = 'width:100%;max-width:500px;margin:8px auto'; const img = document.createElement('img'); img.alt = 'External screen being sent to the fly'; img.style.cssText = 'display:block;width:100%;max-height:60vh;object-fit:contain;background:#05070c;border-radius:6px'; preview.append(img); $('#bpBody').append(preview); }
+      if (frame.image) preview.querySelector('img').src = frame.image;
+      preview.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external';
+      const note = $('#externalVisionNote'); if (note) note.hidden = true;
+    }
+  } else if (m.type === 'api:vision-stop') {
+    for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'external_vision_stop' });
+    const preview = $('#externalVisionPreview'); if (preview) { preview.querySelector('img')?.removeAttribute('src'); preview.hidden = true; }
+    const note = $('#externalVisionNote'); if (note) { note.textContent = 'Waiting for an external screen share.'; note.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external'; }
   } else if (m.type === 'api:signal') {
     // The API transport is connected. A biological reward/punishment pathway is not
     // inferred here; the event is retained for a future explicit neuromodulation model.
