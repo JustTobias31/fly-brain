@@ -25,6 +25,7 @@ app.add_middleware(
 
 clients: set[WebSocket] = set()
 neurons: dict[int, dict[str, Any]] = {}
+active_neuron_ids: set[int] = set()
 latest_state: dict[str, Any] = {"updated_at": None, "body": None, "activity": None}
 event_loop: asyncio.AbstractEventLoop | None = None
 
@@ -145,13 +146,19 @@ async def websocket_endpoint(ws: WebSocket):
             elif kind == "neurons:activity":
                 updates = message.get("neurons", [])
                 if isinstance(updates, list):
+                    for neuron_id in active_neuron_ids:
+                        if neuron_id in neurons:
+                            neurons[neuron_id]["activity"] = 0.0
+                    active_neuron_ids.clear()
                     for item in updates:
                         if isinstance(item, dict) and isinstance(item.get("id"), int):
                             current = neurons.setdefault(item["id"], {"id": item["id"]})
-                            current["activity"] = item.get("activity")
+                            current["activity"] = item.get("activity", 0.0)
                             current["firing_rate"] = item.get("firing_rate")
                             current["spike_count"] = item.get("spike_count")
-                    latest_state["activity"] = {"count": len(updates), "timestamp": time.time()}
+                            if current["activity"]:
+                                active_neuron_ids.add(item["id"])
+                    latest_state["activity"] = {"active_count": len(active_neuron_ids), "sampled_count": len(updates), "timestamp": time.time()}
                     latest_state["updated_at"] = time.time()
             elif kind == "state":
                 latest_state.update({
