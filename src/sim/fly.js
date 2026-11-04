@@ -99,8 +99,8 @@ export class FlyAgent {
     if (a.walls !== false && a.shape === 'square') {
       setWall(0, [radius, t, h / 2], [0, radius, h / 2]);
       setWall(1, [radius, t, h / 2], [0, -radius, h / 2]);
-      setWall(2, [t, radius, h / 2], [radius, 0, h / 2], Math.PI / 2);
-      setWall(3, [t, radius, h / 2], [-radius, 0, h / 2], Math.PI / 2);
+      setWall(2, [t, radius, h / 2], [radius, 0, h / 2]);
+      setWall(3, [t, radius, h / 2], [-radius, 0, h / 2]);
     } else if (a.walls !== false) {
       const n = a.segments || 48;
       for (let k = 0; k < n; k++) { const th = (k + 0.5) / n * Math.PI * 2, len = Math.PI * 2 * radius / n * 0.55;
