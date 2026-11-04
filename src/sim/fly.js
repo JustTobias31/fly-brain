@@ -29,6 +29,8 @@ export class FlyAgent {
     // geoms: albedo for vision; which bodies count as "self body" for bristle contact
     this.geomKind = []; for (let g = 0; g < M.ngeom; g++) { const n = M.geom(g).name; this.geomKind.push(n === 'floor' ? 'floor' : n.startsWith('wall') ? 'wall' : n.startsWith('food') ? 'food' : n.startsWith('bitter') ? 'bitter' : n.startsWith('hazard') ? 'hazard' : n.startsWith('obst') ? 'obst' : n.startsWith('proxy') ? 'fly' : n.startsWith('threat') ? 'threat' : 'self'); }
     this.floorGeom = M.geom('floor').id;
+    this.rootJoint = -1; this.rootQpos = -1; this.rootDof = -1;
+    for (let j = 0; j < M.njnt; j++) if (M.jnt_bodyid[j] === this.bid.thorax && M.jnt_type[j] === 0) { this.rootJoint = j; this.rootQpos = M.jnt_qposadr[j]; this.rootDof = M.jnt_dofadr[j]; break; }
     this.threatMocap = M.body_mocapid[M.body('threat').id];
     // brain
     this.brain = brain || createBrain(data, size, brainOpts, sign);   // wasm brain can be injected (shared connectome memory)
@@ -75,6 +77,38 @@ export class FlyAgent {
     this.mjd = null; this.model = null;
   }
 
+  setPose(position, quaternion) {
+    if (this.rootQpos < 0 || !position?.every(Number.isFinite) || !quaternion?.every(Number.isFinite)) return false;
+    const q = quaternion, a = this.rootQpos, d = this.mjd;
+    d.qpos[a] = position[0]; d.qpos[a + 1] = position[1]; d.qpos[a + 2] = position[2];
+    d.qpos[a + 3] = q[3]; d.qpos[a + 4] = q[0]; d.qpos[a + 5] = q[1]; d.qpos[a + 6] = q[2];
+    d.qvel.fill(0, this.rootDof, this.rootDof + 6);
+    this.mj.mj_forward(this.model, d);
+    return true;
+  }
+  setArenaRadius(radius) {
+    if (!Number.isFinite(radius) || radius < 1 || radius > 100) return false;
+    const a = this.env.arena, M = this.model, floor = this.floorGeom, t = 0.05, h = a.wallHeight || 1.2;
+    a.radius = radius;
+    M.geom_size[floor * 3] = radius + 1; M.geom_size[floor * 3 + 1] = radius + 1;
+    const setWall = (k, size, pos, yaw = 0) => {
+      let id; try { id = M.geom(`wall${k}`).id; } catch { return; }
+      M.geom_size.set(size, id * 3); M.geom_pos.set(pos, id * 3);
+      M.geom_quat.set([Math.cos(yaw / 2), 0, 0, Math.sin(yaw / 2)], id * 4);
+    };
+    if (a.walls !== false && a.shape === 'square') {
+      setWall(0, [radius, t, h / 2], [0, radius, h / 2]);
+      setWall(1, [radius, t, h / 2], [0, -radius, h / 2]);
+      setWall(2, [t, radius, h / 2], [radius, 0, h / 2], Math.PI / 2);
+      setWall(3, [t, radius, h / 2], [-radius, 0, h / 2], Math.PI / 2);
+    } else if (a.walls !== false) {
+      const n = a.segments || 48;
+      for (let k = 0; k < n; k++) { const th = (k + 0.5) / n * Math.PI * 2, len = Math.PI * 2 * radius / n * 0.55;
+        setWall(k, [t, len, h / 2], [(radius + t) * Math.cos(th), (radius + t) * Math.sin(th), h / 2], th); }
+    }
+    this.mj.mj_forward(M, this.mjd);
+    return true;
+  }
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
   /** (re)build the scaffold set and hand the same one to every subsystem, so a kill switch turns a
    *  mechanism off everywhere at once. Called at construction (brainOpts.scaffolds) and live by the
