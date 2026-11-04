@@ -14,8 +14,8 @@ The API is deliberately a separate process from Vite. The browser connects to
 
 - `POST /reward` — reward signal: `{"intensity":1,"duration_ms":100}`
 - `POST /punish` — aversive signal, same shape
-- `POST /input` — sensory-only input. Example:
-  `{"modality":"vision","values":{"frame":"..."},"duration_ms":100}`
+- `POST /input` — sensory-only input. For an external image preview, send a data URL:
+  `{"modality":"vision","values":{"image":"data:image/jpeg;base64,..."},"duration_ms":100}`
 - `GET /neurons` — registered neuron metadata and current activity
 - `GET /neurons` with `X-Neuron-ID: 123` — one neuron
 - `GET /state` — latest body/activity telemetry
