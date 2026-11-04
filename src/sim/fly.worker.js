@@ -33,6 +33,8 @@ onmessage = async (e) => {
   } else if (m.type === 'run') { if (running) return; running = true; lastReal = performance.now(); clearTimeout(timer); if (fly) loop(); }   // before init: loop starts once ready; clearTimeout kills a pending reschedule from a paused loop
   else if (m.type === 'pause') { running = false; clearTimeout(timer); }
   else if (m.type === 'speed') speed = m.speed;
+  else if (m.type === 'set_pose' && fly) { if (fly.setPose(m.position, m.quaternion)) postPose(); }
+  else if (m.type === 'arena:size' && fly) { if (fly.setArenaRadius(m.radius)) postPose(); }
   else if (m.type === 'body') { bodyEnabled = !!m.enabled; if (fly) { fly.bodyEnabled = bodyEnabled; if (!bodyEnabled) { fly.flight.active = false; fly.cmd = { v: 0, turn: 0 }; } } }
   else if (m.type === 'sensory_input') { if (fly) fly.externalSensoryInput = m; }
   else if (m.type === 'external_vision_frame' && fly?.fv && typeof m.pixels === 'string') {
