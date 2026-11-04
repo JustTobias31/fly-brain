@@ -26,6 +26,12 @@ WebSocket messages from the simulation client:
 - `neurons:register`: `{"type":"neurons:register","neurons":[{"id":123,"name":"..."}]}`
 - `neurons:activity`: `{"type":"neurons:activity","neurons":[{"id":123,"activity":0.4}]}`
 - `state`: `{"type":"state","body":{"position":[0,0,0],"orientation":[0,0,0,1]}}`
+- `neuron:fire`: `{"type":"neuron:fire","id":123,"rate":100,"duration_ms":20}`
+- `arena:place`: `{"type":"arena:place","kind":"sugar","x":0.5,"y":-0.2}` (kind: `sugar`, `aversive`, or `cube`)
+- `arena:remove`: `{"type":"arena:remove","x":0.5,"y":-0.2}`
+- `reward`, `punish`, and `sensory_input` can also be sent over the WebSocket; they are broadcast to connected controller clients.
+
+Neuron listing is paginated: `GET /neurons?offset=0&limit=1000`. A single neuron can be fetched with the `X-Neuron-ID` header.
 
 HTTP signal requests are broadcast to connected WebSocket clients. The browser
 simulation still needs its client-side adapter to translate those messages into
