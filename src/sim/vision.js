@@ -60,8 +60,9 @@ export class FlyVisionFV {
   }
   setExternalFrame(frame) {
     if (!frame || !Number.isInteger(frame.width) || !Number.isInteger(frame.height) || !(frame.pixels instanceof Uint8Array) || frame.width < 1 || frame.height < 1 || frame.pixels.length !== frame.width * frame.height) return;
+    const firstFrame = !this.externalFrame;
     this.externalFrame = { width: frame.width, height: frame.height, pixels: frame.pixels };
-    this.settled = false;
+    if (firstFrame) this.settled = false;
   }
   clearExternalFrame() { this.externalFrame = null; this.settled = false; }
   sampleExternal() {
