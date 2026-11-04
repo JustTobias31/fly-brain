@@ -47,6 +47,7 @@ async function main() {
   if (!crossOriginIsolated) console.warn('not cross-origin isolated: SharedArrayBuffer unavailable');
   const data = await loadConnectome(status);
   meta = data.meta;
+  if (window.parent !== window) { for (let start = 0; start < meta.types.length; start += 1000) { const neurons = []; for (let id = start; id < Math.min(start + 1000, meta.types.length); id++) neurons.push({ id, name: meta.types[id], type: meta.types[id] }); window.parent.postMessage({ source: 'fly-arena', type: 'neuron-metadata', neurons }, '*'); } }
   status('loading body model');
   const [bm, xml, g, blender, levels, output, sz, sg, bp, wasmBytes, fvb, fvj, fvi, fvm, nmc, detail, reaf] = await Promise.all([
     fetch(`${BASE}data/bodymap.json`).then(r => r.json()), fetch(`${BASE}body/fly_physics.xml`).then(r => r.text()), fetch(`${BASE}body/gait.json`).then(r => r.json()),
