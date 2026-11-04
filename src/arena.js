@@ -507,7 +507,7 @@ window.addEventListener('message', e => {
     tool = ({ sugar: 'food', aversive: 'bitter', cube: 'obstacle', remove: 'remove' })[m.tool] || 'none';
   } else if (m.type === 'controller:vision-source') {
     controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
-    if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'External vision is selected. Send visual sensory data to POST /input with modality set to vision.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external'; }
+    if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external frame via POST /input.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
   } else if (m.type === 'controller:view') {
     controllerView = m.view;
     const arena = controllerView === 'arena';
@@ -517,7 +517,7 @@ window.addEventListener('message', e => {
     if (!arena) {
       const eyes = $('#bpBody .eyes'), groupsEl = $('#groups'), brain = $('#brain');
       eyes.hidden = controllerView !== 'vision' || controllerVisionSource === 'external';
-      let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'External vision is selected. Send visual sensory data to POST /input with modality set to vision.'; $('#bpBody').append(note); } note.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external';
+      let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external frame via POST /input.'; $('#bpBody').append(note); } note.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; let preview = $('#externalVisionPreview'); if (!preview) { preview = document.createElement('div'); preview.id = 'externalVisionPreview'; preview.style.cssText = 'width:100%;max-width:500px;margin:8px auto'; preview.hidden = true; const img = document.createElement('img'); img.alt = 'External vision input'; img.style.cssText = 'display:block;width:100%;max-height:60vh;object-fit:contain;background:#05070c;border-radius:6px'; preview.append(img); $('#bpBody').append(preview); } preview.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external';
       $('#brainpanel').classList.remove('folded');
       groupsEl.hidden = controllerView !== 'brain';
       brain.style.display = controllerView === 'brain' ? 'block' : 'none';
@@ -532,6 +532,7 @@ window.addEventListener('message', e => {
     for (const f of flies) if (f.ready) f.worker.postMessage(m.signal);
   } else if (m.type === 'api:sensory-input') {
     for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'sensory_input', ...m.input });
+    if (m.input?.modality === 'vision') { const src = m.input.values?.image || m.input.values?.frame; if (typeof src === 'string' && /^(data:image\\/|https?:\\/\\/)/i.test(src)) { let preview = $('#externalVisionPreview'); if (!preview) { preview = document.createElement('div'); preview.id = 'externalVisionPreview'; preview.style.cssText = 'width:100%;max-width:500px;margin:8px auto'; const img = document.createElement('img'); img.alt = 'External vision input'; img.style.cssText = 'display:block;width:100%;max-height:60vh;object-fit:contain;background:#05070c;border-radius:6px'; preview.append(img); $('#bpBody').append(preview); } preview.querySelector('img').src = src; preview.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external'; const note = $('#externalVisionNote'); if (note) note.hidden = true; } }
   } else if (m.type === 'api:neuron-fire') {
     for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'neuron:fire', ...m.command });
   } else if (m.type === 'api:arena-place') {
