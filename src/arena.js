@@ -242,7 +242,7 @@ function onWorker(f, m) {
   if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
-    if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', body: { id: f.id, position: m.pos, yaw: m.yaw, orientation: [0, 0, Math.sin((m.yaw || 0) / 2), Math.cos((m.yaw || 0) / 2)] } }, '*');
+    if (window.parent !== window) { const bi = Math.max(0, f.bodyNames?.indexOf('thorax') ?? 0), orientation = m.xquat ? Array.from(m.xquat.slice(bi * 4, bi * 4 + 4)) : [0, 0, Math.sin((m.yaw || 0) / 2), Math.cos((m.yaw || 0) / 2)]; window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', body: { id: f.id, position: m.pos, yaw: m.yaw, orientation } }, '*'); }
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
