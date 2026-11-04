@@ -17,7 +17,7 @@ export const DEFAULT_ENV = {
 
 // Environment presets ("different environments to play and survive in")
 export const PRESETS = {
-  empty: { label: 'Empty', flies: 1, env: () => ({ arena: { radius: 20, wallHeight: 0, segments: 0, wallFriction: 1, walls: false, shape: 'square' }, food: [], bitterPatches: [], odors: [], obstacles: [], hazards: [], light: { sky: 1.0, sun: [0.3, 0.2, 1.0] }, wind: [0, 0], threat: null }) },
+  empty: { label: 'Empty', flies: 1, env: () => ({ arena: { radius: 20, wallHeight: 1.2, segments: 48, wallFriction: 1, walls: true, shape: 'square' }, food: [], bitterPatches: [], odors: [], obstacles: [], hazards: [], light: { sky: 1.0, sun: [0.3, 0.2, 1.0] }, wind: [0, 0], threat: null }) },
   foraging: { label: 'Foraging arena', env: () => structuredClone(DEFAULT_ENV), flies: 1 },
   openfield: { label: 'Open field, scattered food', flies: 3, env: () => ({ ...structuredClone(DEFAULT_ENV), obstacles: [], hazards: [], bitterPatches: [{ x: 0, y: -1.4, r: 0.3, bitter: 1 }],
     food: [[1.4, 0.9], [-1.5, 0.8], [0.2, 1.8], [-0.6, -1.6], [1.6, -1.1]].map(([x, y]) => ({ x, y, r: 0.2, sugar: 1, bitter: 0, water: 0.2, amount: 3 })),
@@ -33,12 +33,21 @@ export const PRESETS = {
 export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, nProxies = 0 } = {}) {
   const a = env.arena, parts = [];
   parts.push(`<geom name="floor" type="plane" size="${a.radius + 1} ${a.radius + 1} .1" rgba=".55 .5 .42 1" friction="1" solref="0.0002 1" group="0"/>`);
-  // circular wall from box segments
-  const n = a.segments, t = 0.05;
-  if (a.walls !== false) for (let k = 0; k < n; k++) {
+  // Boundary walls follow the baseplate shape. Square arenas use four continuous walls;
+  // circular arenas use short tangent boxes to approximate the circumference.
+  const n = a.segments || 48, t = 0.05, h = a.wallHeight || 1.2, friction = a.wallFriction ?? 0.1;
+  if (a.walls !== false && a.shape === 'square') {
+    const walls = [
+      [a.radius, t, 0, a.radius, h / 2, 0],
+      [a.radius, t, 0, -a.radius, h / 2, 0],
+      [t, a.radius, 0, 0, a.radius, Math.PI / 2],
+      [t, a.radius, 0, 0, -a.radius, Math.PI / 2],
+    ];
+    walls.forEach(([sx, sy, , x, y, yaw], k) => parts.push(`<geom name="wall${k}" type="box" size="${sx} ${sy} ${h / 2}" pos="${x} ${y} ${h / 2}" euler="0 0 ${yaw}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${friction}"/>`));
+  } else if (a.walls !== false) for (let k = 0; k < n; k++) {
     const th = (k + 0.5) / n * 2 * Math.PI, len = 2 * Math.PI * a.radius / n * 0.55;
     const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
-    parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${a.wallHeight / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${a.wallHeight / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
+    parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${h / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${h / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${friction}"/>`);
   }
   env.obstacles.forEach((o, k) => {
     if (o.type === 'box') parts.push(`<geom name="obst${k}" type="box" size="${o.sx} ${o.sy} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
