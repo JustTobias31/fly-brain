@@ -103,7 +103,7 @@ let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
 const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), flyBounds = new THREE.Sphere(new THREE.Vector3(), 0.24);
 const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUploads: 0, brainDraws: 0 };
-let brainRenderer, brainScene, brainCam, brainPts, brainAct;
+let brainRenderer, brainScene, brainCam, brainControls, brainPts, brainAct;
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
   resolution = new RenderResolution(() => resize(), { targetFps: 120 });
@@ -180,13 +180,19 @@ function buildScene(data) {
   hlPts = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, transparent: true, opacity: 1, depthWrite: false, depthTest: false }));
   hlPts.visible = false; brainScene.add(hlPts);
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
-  const brainCanvas = $('#brain'); brainCanvas.tabIndex = 0; brainCanvas.style.cursor = 'grab';
-  let brainDrag = null;
-  brainCanvas.addEventListener('pointerdown', e => { brainCanvas.focus(); brainDrag = {x:e.clientX,y:e.clientY}; brainCanvas.setPointerCapture(e.pointerId); brainCanvas.style.cursor='grabbing'; e.preventDefault(); });
-  brainCanvas.addEventListener('pointermove', e => { if (!brainDrag) return; const dx=e.clientX-brainDrag.x,dy=e.clientY-brainDrag.y; brainDrag={x:e.clientX,y:e.clientY}; brainPts.rotation.y += dx*0.008; brainPts.rotation.x += dy*0.008; brainPts.rotation.x=Math.max(-Math.PI,Math.min(Math.PI,brainPts.rotation.x)); });
-  const endBrainDrag = () => { brainDrag=null; brainCanvas.style.cursor='grab'; };
-  brainCanvas.addEventListener('pointerup',endBrainDrag); brainCanvas.addEventListener('pointercancel',endBrainDrag);
-  brainCanvas.addEventListener('keydown', e => { const step=e.shiftKey?70:30; const k=e.key.toLowerCase(); if (!['w','a','s','d'].includes(k)) return; e.preventDefault(); if(k==='w')brainCam.position.z-=step; if(k==='s')brainCam.position.z+=step; if(k==='a')brainCam.position.x-=step; if(k==='d')brainCam.position.x+=step; brainCam.lookAt(0,0,0); });
+  const brainCanvas = $('#brain');
+  brainControls = new OrbitControls(brainCam, brainCanvas);
+  brainControls.target.set(0, 0, 0);
+  brainControls.enableDamping = true;
+  brainControls.dampingFactor = 0.075;
+  brainControls.rotateSpeed = 0.7;
+  brainControls.zoomSpeed = 0.9;
+  brainControls.panSpeed = 0.8;
+  brainControls.enablePan = true;
+  brainControls.minDistance = 80;
+  brainControls.maxDistance = 6500;
+  brainControls.update();
+  brainCanvas.style.cursor = 'grab';
 }
 let pd = null, remotePoseResume = false;
 let gizmoVisible = true;
@@ -569,7 +575,7 @@ function animate() {
     col.needsUpdate = true; brainDirty = false; brainColorFly = selected; brainColorHover = hover; metrics.brainUploads++;
   }
   if (hover !== hlShown) showGroupInInset(hover);
-  hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
+  brainControls?.update(); hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
 
 }
 
