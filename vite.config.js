@@ -17,7 +17,7 @@ export default defineConfig({
   base: process.env.BASE_PATH || '/', // CI sets /fly-brain/ for GitHub Pages
   plugins: [dropUnpacked, controllerRoute],
   define: { __DATA_FILES__: JSON.stringify(DATA_FILES) },
-  server: { headers: isolation },
+  server: { headers: isolation, proxy: { "/ws": { target: "ws://127.0.0.1:8000", ws: true }, "/sessions": { target: "http://127.0.0.1:8000" }, "/health": { target: "http://127.0.0.1:8000" } } },
   preview: { headers: isolation },
   optimizeDeps: { exclude: ['@mujoco/mujoco'] },
   worker: { format: 'es' },
