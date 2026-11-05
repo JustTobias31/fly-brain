@@ -670,6 +670,7 @@ window.addEventListener('message', e => {
     setGizmoVisible(m.visible);
   } else if (m.type === 'controller:tool') {
     tool = ['food','odor','bitter','hazard','obstacle','wedge','ball','co2','none'].includes(m.tool) ? m.tool : 'none';
+    if (editorActive && tool !== 'none') { editorMode = 'place'; editorSelected = null; editorGizmo.visible = false; transformControls.detach(); }
   } else if (m.type === 'controller:arena-size') {
     if(Number.isFinite(Number(m.sizeX)))setArenaSize(m.sizeX,Number.isFinite(Number(m.sizeY))?m.sizeY:env.arena.sizeY||m.sizeX);else setArenaRadius(m.radius);
   } else if (m.type === 'controller:element-delete') {
