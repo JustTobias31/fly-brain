@@ -133,8 +133,13 @@ export class FlyAgent {
       const o = this.env.obstacles[k];
       if (!o) { M.geom_contype[id] = 0; M.geom_conaffinity[id] = 0; M.geom_size.set([0.001, 0.001, 0.001], id * 3); M.geom_pos.set([0, 0, -20], id * 3); continue; }
       M.geom_contype[id] = 2; M.geom_conaffinity[id] = 2;
-      M.geom_size.set([o.sx ?? 0.2, o.sy ?? 0.2, (o.sz ?? 0.3) / 2], id * 3);
-      M.geom_pos.set([o.x, o.y, (o.sz ?? 0.3) / 2], id * 3);
+      const sx = Math.max(0.001, o.sx ?? 0.2), sy = Math.max(0.001, o.sy ?? 0.2), sz = Math.max(0.002, o.sz ?? 0.3);
+      M.geom_size.set([sx, sy, sz / 2], id * 3);
+      // MuJoCo computes geom_rbound when the XML is compiled. These editor slots
+      // were compiled as tiny placeholders, so update the broad-phase bound too
+      // or raycasts can reject a correctly resized block before testing its shape.
+      M.geom_rbound[id] = Math.hypot(sx, sy, sz / 2);
+      M.geom_pos.set([o.x, o.y, sz / 2], id * 3);
     }
     this.mj.mj_forward(M, this.mjd);
   }
