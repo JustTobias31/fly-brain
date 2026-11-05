@@ -175,7 +175,6 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: str = "peer"):
-    global clients, neurons, active_neuron_ids, latest_state
     session = sessions.get(session_id) if session_id else None
     if session_id and session is None:
         await ws.close(code=1008, reason="Unknown session")
