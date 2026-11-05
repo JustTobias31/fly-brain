@@ -731,7 +731,7 @@ window.addEventListener('message', e => {
       const action=cmd.action,element=String(cmd.element||'').toLowerCase();
       if(action==='place'&&(element==='fly'||element==='fly female')){
         const pos=validVec(cmd.position,3)?cmd.position:[0,0,0.13],sex=element==='fly female'?'f':'m';
-        addFly([pos[0],pos[1]],0,sex).then(f=>{if(!f){ack(false,{},'Fly could not be created');return;}const name='fly '+f.id;f.apiName=name;ack(true,{id:f.id},null,{name});});
+        addFly([pos[0],pos[1]],0,sex).then(f=>{if(!f){ack(false,{},'Fly could not be created');return;}const name='fly '+f.id;f.apiName=name;f.worker.postMessage({type:'set_pose',position:[pos[0],pos[1],pos[2]??0.132],quaternion:validVec(cmd.rotation,4)?cmd.rotation:[0,0,0,1]});ack(true,{id:f.id},null,{name});});
       } else if(action==='place'){
         const kind=kinds[element],pos=validVec(cmd.position,3)?cmd.position:[0,0,0];
         if(!kind){ack(false,{},'Unsupported element type');}
