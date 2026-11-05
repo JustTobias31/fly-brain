@@ -5,7 +5,6 @@ const sendLocal=(type,data={})=>frame.contentWindow?.postMessage({source:"fly-co
 const send=(type,data={})=>{if(socket?.readyState===WebSocket.OPEN&&!sessionOwner){socket.send(JSON.stringify({type,...data}));if(type==="controller:vision-source")sendLocal(type,{visionSource:data.source});return}const payload={source:"fly-controller",type,...data};if(type==="controller:vision-source"){payload.visionSource=data.source;payload.source="fly-controller"}frame.contentWindow?.postMessage(payload,"*")};
 const logLine=s=>{log.textContent=(s+"\n"+log.textContent).slice(0,3500)};
 function setView(view){activeView=view;send("controller:view",{view})}
-const sidebar=document.querySelector("#mainSidebar"),sidebarToggle=document.querySelector("#sidebarToggle");sidebarToggle?.addEventListener("click",()=>{const collapsed=document.body.classList.toggle("sidebar-collapsed");sidebarToggle.setAttribute("aria-expanded",String(!collapsed));sidebarToggle.title=collapsed?"Show main sidebar":"Hide main sidebar"});
 document.querySelector("#run")?.addEventListener("click",()=>send("controller:run"));
 document.querySelector("#pause")?.addEventListener("click",()=>send("controller:pause"));
 document.querySelector("#stop")?.addEventListener("click",()=>{send("controller:stop");send("controller:reset-view")});
