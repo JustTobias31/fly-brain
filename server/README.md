@@ -222,6 +222,166 @@ Invalid or unknown message types produce:
 
 Neuron registration receives `neurons:registered`; malformed messages may receive `error`. State/activity updates are stored by the server and available through `GET /state`.
 
+
+## Planned controller → simulation commands
+
+> **Specification only — these commands are not implemented yet.** This section describes the intended controller protocol so a client can be built against it later. The existing WebSocket handler currently supports the message types documented above; do not assume these new commands work until the simulation adapter and server routing are implemented.
+
+All commands are JSON objects with a `type` string. Include a unique `requestId` when you want to match a reply to a request. The examples below show the proposed message shape.
+
+### 1. Simulation playback
+
+Use one message for all three states:
+
+```json
+{"type":"simulation:control","action":"play","requestId":"sim-1"}
+{"type":"simulation:control","action":"pause","requestId":"sim-2"}
+{"type":"simulation:control","action":"stop","requestId":"sim-3"}
+```
+
+- `action`: `play`, `pause`, or `stop`.
+- `play` resumes/starts the simulation, `pause` freezes it while retaining its state, and `stop` stops the current run.
+
+### 2. Place, move, rotate, and remove elements
+
+Use `element:command` for arena objects and flies:
+
+```json
+{"type":"element:command","action":"place","element":"cube","position":[1,0,0.5],"properties":{"size":[1,1,1]},"requestId":"el-1"}
+{"type":"element:command","action":"move","id":"block-12","position":[2,0,0.5]}
+{"type":"element:command","action":"rotate","id":"block-12","rotation":[0,0,0,1]}
+{"type":"element:command","action":"remove","id":"block-12"}
+```
+
+- `action`: `place`, `move`, `rotate`, or `remove`.
+- `element`: element type/name to create, such as `cube`, `sugar`, `odor`, `fly`, or `fly female`. Required for `place`.
+- `id`: ID of an existing element for `move`, `rotate`, and `remove`.
+- `position`: world-space `[x,y,z]`.
+- `rotation`: quaternion `[x,y,z,w]`.
+- `properties`: optional initial properties for a newly placed element.
+- `name`: optional display/name value for the created element.
+
+**Fly creation shortcut:** when `action` is `place` and `element` is `fly` or `fly female` (case-insensitive), create a fly instead of an arena prop. The optional `name` can identify the new fly. The server/simulation should return the newly assigned ID.
+
+### 3. Change an element or fly property
+
+```json
+{"type":"property:set","target":{"type":"element","id":"block-12"},"property":"size","value":[2,1,1],"requestId":"prop-1"}
+{"type":"property:set","target":{"type":"fly","id":0},"property":"movementEnabled","value":false}
+```
+
+- `target.type`: `element` or `fly`.
+- `target.id`: target ID.
+- `property`: property key supported by that target.
+- `value`: JSON value (number, string, boolean, array, or object).
+- Reject unknown or read-only properties with an `error` reply rather than silently accepting them.
+
+### 4. Get the arena block/element list
+
+```json
+{"type":"arena:list","requestId":"list-1"}
+```
+
+Expected reply:
+
+```json
+{
+  "type":"arena:list:result",
+  "requestId":"list-1",
+  "elements":[
+    {
+      "id":"block-12",
+      "type":"cube",
+      "name":"Test block",
+      "position":[2,0,0.5],
+      "rotation":[0,0,0,1],
+      "properties":{"size":[2,1,1]}
+    }
+  ]
+}
+```
+
+Return every current arena element, including its stable ID, type, position, rotation, and editable properties. Use an empty array when the arena contains no elements.
+
+### 5. Trigger the loom threat (jumpscare)
+
+```json
+{"type":"loom:trigger","requestId":"loom-1"}
+```
+
+This starts the existing loom-threat sequence. It is a trigger command, not a request to create a new arena object.
+
+### 6. Make a fly take off
+
+```json
+{"type":"fly:takeoff","flyId":0,"requestId":"takeoff-1"}
+```
+
+- `flyId`: optional; when omitted, apply the takeoff command to the currently selected/default fly.
+- The simulation should acknowledge whether takeoff was accepted.
+
+### 7. Read neuron activity
+
+Request selected neurons by numeric IDs and/or names:
+
+```json
+{"type":"neurons:read","ids":[123,456],"requestId":"read-1"}
+{"type":"neurons:read","names":["example neuron","another neuron"]}
+```
+
+Omit both `ids` and `names` to request the available neuron readout. Expected reply:
+
+```json
+{
+  "type":"neurons:read:result",
+  "requestId":"read-1",
+  "neurons":[
+    {"id":123,"name":"example neuron","activity":0.4,"firing_rate":12.0,"spike_count":3}
+  ]
+}
+```
+
+Return the latest available values for each matched neuron. Unknown IDs/names should be reported clearly (for example in a `missing` array) rather than causing the entire request to fail.
+
+### 8. Set the scaffold
+
+```json
+{"type":"scaffold:set","scaffold":"walking","requestId":"scaffold-1"}
+```
+
+`scaffold` may be a registered scaffold name or a JSON object describing a scaffold configuration. The simulation should validate it, apply it, and return an error if the requested scaffold is unsupported.
+
+### 9–10. Visual stream
+
+Send frames using the existing `vision:frame` message shape:
+
+```json
+{"type":"vision:frame","width":160,"height":90,"pixels":"<base64 grayscale bytes>","image":"data:image/jpeg;base64,<optional jpeg>"}
+```
+
+The **first valid frame automatically enables the visual stream**; clients do not need a separate start command. Continue sending frames while streaming. To disable the stream:
+
+```json
+{"type":"vision:stop","requestId":"vision-stop-1"}
+```
+
+The frame dimensions, pixel encoding, preview image, and rate limits are the same as the [External vision frames](#external-vision-frames) section above.
+
+### Replies and errors
+
+For command acknowledgements, use a consistent reply shape:
+
+```json
+{"type":"ack","requestId":"el-1","ok":true,"result":{"id":"block-12"}}
+{"type":"ack","requestId":"el-2","ok":false,"error":"Element not found"}
+```
+
+- Echo the incoming `requestId` in the reply when one was supplied.
+- Include returned data in `result` for commands that create or modify objects.
+- Use the dedicated result message types shown above for list and neuron-read requests.
+- Send `{"type":"error","error":"description","requestId":"..."}` for malformed or unsupported commands.
+- Keep the WebSocket responsive: large lists/readouts should be returned in bounded batches if necessary.
+
 ## Security note
 
 This API is intended for local development. Do not expose it directly to the public internet without authentication, authorization, and stricter origin/network controls.
