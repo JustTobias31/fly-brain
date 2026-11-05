@@ -37,6 +37,7 @@ onmessage = async (e) => {
   else if (m.type === 'set_pose' && fly) { if (fly.setPose(m.position, m.quaternion)) postPose(); }
   else if (m.type === 'arena:size' && fly) { if (fly.setArenaRadius(m.radius)) postPose(); }
   else if (m.type === 'motion' && fly) fly.setMotionOptions(m.options);
+  else if (m.type === 'vision:obstacles' && fly) fly.obstaclesVisible = !!m.enabled;
   else if (m.type === 'training' && fly) fly.setTraining(m.enabled);
   else if ((m.type === 'reward' || m.type === 'punish') && fly) { const changed = fly.applyReward((m.type === 'punish' ? -1 : 1) * Math.max(0, Math.min(5, Number(m.intensity) || 1))); postMessage({ type: 'training-result', changed, signal: m.type }); }
   else if (m.type === 'sensory_input') { if (fly) fly.externalSensoryInput = m; }
