@@ -720,7 +720,7 @@ window.addEventListener('message', e => {
   } else if (m.type === 'controller:reset-view') {
     controls?.reset?.();
   } else if (m.type === 'api:command') {
-    const cmd=m.command||{}, reply=(type,data={})=>{if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type,...data},'*');}, ack=(ok,result={},error)=>reply('api:command-result',{requestId:cmd.requestId,ok,result,error});
+    const cmd=m.command||{}, reply=(type,data={})=>{if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type,...data},'*');}, ack=(ok,result={},error,extra={})=>reply('api:command-result',{requestId:cmd.requestId,ok,result,error,...extra});
     const validVec=(v,n)=>Array.isArray(v)&&v.length===n&&v.every(Number.isFinite);
     const findFly=id=>flies.find(f=>f.id===Number(id));
     const kinds={cube:'obstacles',block:'obstacles',sugar:'food',food:'food',odor:'odors',heat:'hazards',hazard:'hazards',bitter:'bitterPatches',aversive:'bitterPatches'};
@@ -731,7 +731,7 @@ window.addEventListener('message', e => {
       const action=cmd.action,element=String(cmd.element||'').toLowerCase();
       if(action==='place'&&(element==='fly'||element==='fly female')){
         const pos=validVec(cmd.position,3)?cmd.position:[0,0,0.13],sex=element==='fly female'?'f':'m';
-        addFly([pos[0],pos[1]],0,sex).then(f=>{if(!f){ack(false,{},'Fly could not be created');return;}const name='fly '+f.id;f.apiName=name;ack(true,{id:f.id},{name});});
+        addFly([pos[0],pos[1]],0,sex).then(f=>{if(!f){ack(false,{},'Fly could not be created');return;}const name='fly '+f.id;f.apiName=name;ack(true,{id:f.id},null,{name});});
       } else if(action==='place'){
         const kind=kinds[element],pos=validVec(cmd.position,3)?cmd.position:[0,0,0];
         if(!kind){ack(false,{},'Unsupported element type');}
