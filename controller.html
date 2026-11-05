@@ -1,54 +1,22 @@
 <!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fly Brain · Controller</title>
-<link rel="stylesheet" href="/src/controller.css">
-</head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fly Brain · Controller</title><link rel="stylesheet" href="/src/controller.css"></head>
 <body>
-<header class="top">
-  <div class="brand"><strong>FLY BRAIN</strong><span>CONTROLLER</span></div>
-  <nav class="views" aria-label="Views">
-    <button class="view active" data-view="arena">Arena</button>
-    <button class="view" data-view="brain">Brain</button>
-    <button class="view" data-view="vision">What it sees</button>
-  </nav>
-  <div class="status"><i id="connection"></i><span id="connectionText">API disconnected</span></div>
-</header>
-<main>
-  <iframe id="simulation" src="/arena.html" title="Fly simulation"></iframe>
-  <aside class="controls">
-    <section>
-      <h2>Controls</h2>
-      <div class="actions"><button id="resetView">Reset view</button></div>
-      <label class="field">Fly gizmo <select id="gizmoMode"><option value="translate">Move</option><option value="rotate">Rotate</option></select></label>
-      <p class="hint">Select a fly in the arena, then drag its gizmo. The simulation pauses while you drag.</p>
-      <label class="field">Baseplate size <input id="arenaSize" type="range" min="4" max="100" step="2" value="40"><output id="arenaSizeValue">40</output></label>
-      <label class="switch"><span>Body enabled</span><input id="body" type="checkbox" checked><i></i></label>
-      <label class="switch"><span>WebSocket API</span><input id="websocket" type="checkbox"><i></i></label>
-      <label class="switch"><span>External vision stream</span><input id="externalVision" type="checkbox"><i></i></label>
-      <p class="hint">The brain keeps running with the body disabled. Enable external vision to choose a screen, window, or browser tab; its image replaces the fly's arena vision.</p>
-    </section>
-    <section>
-      <h2>Elements</h2>
-      <div id="elements" class="elements"><p class="hint">Loading elements…</p></div>
-    </section>
-    <section>
-      <h2>Signals</h2>
-      <div class="actions"><button id="reward">Reward</button><button id="punish">Punish</button></div>
-      <label>Intensity <input id="intensity" type="range" min="0" max="10" step=".1" value="1"><output id="intensityValue">1.0</output></label>
-      <p class="hint">Signals are sent to the local API. Their biological effect depends on the simulation adapter.</p>
-    </section>
-    <section>
-      <h2>API</h2>
-      <div class="apirow"><label for="api">HTTP address</label><input id="api" value="http://127.0.0.1:8000"></div>
-      <div class="apirow"><label for="ws">WebSocket address</label><input id="ws" value="ws://127.0.0.1:8000/ws"></div>
-      <button id="connect">Connect</button>
-      <pre id="apiLog">Waiting for local API…</pre>
-    </section>
-  </aside>
-</main>
-<script type="module" src="/src/controller.js"></script>
-</body>
-</html>
+<iframe id="simulation" src="/arena.html" title="Fly simulation"></iframe>
+<nav class="toolbar" aria-label="Controller tools">
+  <div class="mark">FB</div>
+  <button id="run" title="Start simulation" aria-label="Start">▶</button><button id="pause" title="Pause simulation" aria-label="Pause">Ⅱ</button><button id="stop" title="Stop simulation" aria-label="Stop">■</button>
+  <div class="sep"></div>
+  <button id="build" title="Build/place tools" aria-label="Build">＋</button><button id="flyInfo" title="Fly information" aria-label="Fly information">ⓘ</button><button id="debugOpen" title="HTTP / WebSocket debug" aria-label="HTTP debug">⌁</button>
+  <div class="grow"></div><span class="connection"><i id="connection"></i><span id="connectionText">Offline</span></span>
+</nav>
+<div class="rightLayout"><section class="vision panel"><header><span class="eyebrow">SENSORY INPUT</span><strong>What the fly sees</strong><button id="visionSource" title="Choose vision source">↗</button></header><div id="visionContent"><span class="placeholder">Waiting for visual input…</span></div></section>
+<section class="brain panel"><header><span class="eyebrow">CONNECTOME</span><strong>Brain activity</strong><button id="brainSettingsToggle" title="Brain settings">⚙</button></header><div id="brainContent"><span class="placeholder">Loading brain view…</span></div><div id="brainSettings" hidden>
+<label>Body enabled <input id="body" type="checkbox" checked></label>
+<label>Fly gizmo <select id="gizmoMode"><option value="translate">Move</option><option value="rotate">Rotate</option></select></label>
+<label>Baseplate <input id="arenaSize" type="range" min="4" max="100" step="2" value="40"><output id="arenaSizeValue">40</output></label>
+<label>External vision <input id="externalVision" type="checkbox"></label>
+</div></section></div>
+<div id="buildPopup" class="popup" hidden><header><strong>Build tools</strong><button data-close="buildPopup">×</button></header><div class="popupBody"><p>Choose a placement tool in the arena panel to add elements. Existing elements can be removed from the list below.</p><div id="elements" class="elements">Loading elements…</div></div></div>
+<div id="flyPopup" class="popup" hidden><header><strong>Fly information</strong><button data-close="flyPopup">×</button></header><div class="popupBody"><p>Simulation telemetry and selected fly information appear here.</p><pre id="flyLog">Waiting for fly telemetry…</pre></div></div>
+<div id="debugPopup" class="popup" hidden><header><strong>HTTP / WebSocket debug</strong><button data-close="debugPopup">×</button></header><div class="popupBody"><label>HTTP base <input id="api" value="http://127.0.0.1:8000"></label><label>WebSocket <input id="ws" value="ws://127.0.0.1:8000/ws"></label><div class="actions"><button id="connect">Connect</button><button id="health">GET /health</button><button id="disconnect">Disconnect</button></div><pre id="apiLog">Waiting for local API…</pre></div></div>
+<script type="module" src="/src/controller.js"></script></body></html>
