@@ -34,6 +34,9 @@ export class FlyAgent {
     this.threatMocap = M.body_mocapid[M.body('threat').id];
     // brain
     this.brain = brain || createBrain(data, size, brainOpts, sign);   // wasm brain can be injected (shared connectome memory)
+    this.synapseWeights = this.brain.weights || this.brain.graph?.weights || null;
+    this.initialSynapseWeights = this.synapseWeights?.slice() || null;
+    this.trainingEnabled = false;
     // hunger as hormones and octopamine (neuromod: { calib: neuromod.json, block }); needs brainOpts.neuromod, which
     // also removes the OA neurons' fast synapses from the graph
     const nmExtra = {};
@@ -102,6 +105,25 @@ export class FlyAgent {
     const a = this.rootQpos, d = this.mjd, v = this.rootDof, anchor = this.motionAnchor;
     if (!this.motion.movement) { d.qpos.set(anchor.position, a); d.qvel.fill(0, v, v + 3); }
     if (!this.motion.rotation) { d.qpos.set(anchor.rotation, a + 3); d.qvel.fill(0, v + 3, v + 6); }
+  }
+  setTraining(enabled) { this.trainingEnabled = !!enabled; }
+  applyReward(value = 1) {
+    if (!this.trainingEnabled || !this.synapseWeights || !this.initialSynapseWeights) return 0;
+    const reward = Math.max(-5, Math.min(5, Number(value) || 0)); if (!reward) return 0;
+    const trace = this.brain.trace, indptr = this.data.indptr, indices = this.data.indices, weights = this.synapseWeights, base = this.initialSynapseWeights;
+    const rate = 0.04 * Math.abs(reward), direction = Math.sign(reward); let changed = 0;
+    for (let pre = 0; pre < this.data.N; pre++) {
+      const preTrace = trace[pre]; if (preTrace < 0.01) continue;
+      for (let k = indptr[pre]; k < indptr[pre + 1]; k++) {
+        const original = base[k]; if (original <= 0) continue;
+        const postTrace = trace[indices[k]]; if (postTrace < 0.01) continue;
+        const eligibility = Math.min(1, preTrace * postTrace);
+        const next = Math.max(original * 0.5, Math.min(original * 2, weights[k] * Math.exp(direction * rate * eligibility)));
+        if (Math.abs(next - weights[k]) > 1e-7) { weights[k] = next; changed++; }
+      }
+    }
+    if (changed) this.brain.setSynapseWeights?.(weights);
+    return changed;
   }
   syncObstacles() {
     const M = this.model;
