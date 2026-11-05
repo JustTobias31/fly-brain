@@ -40,7 +40,7 @@ const FLY_CAP = Math.min(MAX_FLIES, Math.max(1, Math.floor(Number(new URLSearchP
 const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(location.search).get('vision') || '').toLowerCase());
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
-let editorActive=false, editorMode='select';
+let editorActive=false, editorMode='select', editorSelected=null;
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, trainingEnabled = false;
 function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';const play=$('#play');if(play)play.textContent=running?'❚❚ Pause':'▶ Run';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
@@ -288,8 +288,7 @@ function rebuildEnv() {
       wall.rotation.x = Math.PI / 2; wall.position.z = h / 2; envGroup.add(wall);
     }
   }
-  for (const o of env.obstacles) { const m = new THREE.Mesh(o.type === 'box' ? new THREE.BoxGeometry(o.sx * 2, o.sy * 2, o.sz) : new THREE.CylinderGeometry(o.r, o.r, o.sz, 32), new THREE.MeshStandardMaterial({ color: '#3d4a3d', roughness: 0.7 }));
-    if (o.type !== 'box') m.rotation.x = Math.PI / 2; m.position.set(o.x, o.y, o.sz / 2); m.castShadow = m.receiveShadow = true; envGroup.add(m); }
+  for (const [index,o] of env.obstacles.entries()) { let geo; if(o.type==='ball')geo=new THREE.SphereGeometry(o.r||0.25,24,16);else if(o.type==='wedge')geo=new THREE.ConeGeometry(o.r||0.3,o.sz||0.4,3);else if(o.type==='box')geo=new THREE.BoxGeometry((o.sx||0.2)*2,(o.sy||0.2)*2,o.sz||0.3);else geo=new THREE.CylinderGeometry(o.r||0.25,o.r||0.25,o.sz||0.3,32); const mat=new THREE.MeshStandardMaterial({color:editorSelected?.kind==='obstacles'&&editorSelected.index===index?'#ffb347':'#3d4a3d',roughness:0.7}); const m=new THREE.Mesh(geo,mat); if(o.type==='cylinder')m.rotation.x=Math.PI/2; m.position.set(o.x,o.y,o.type==='ball'?(o.r||0.25):(o.sz||0.3)/2);m.castShadow=m.receiveShadow=true;m.userData.editorObject={kind:'obstacles',index};envGroup.add(m); }
   for (const f of env.food) { const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m); }
   for (const b of env.bitterPatches) { const m = discMesh(b.r, '#4f8fd6', 0.9); m.position.set(b.x, b.y, 0.002); envGroup.add(m); }
   for (const h of env.hazards) { const m = discMesh(h.r, '#d9502f', 0.9); m.position.set(h.x, h.y, 0.002); envGroup.add(m); const glow = discMesh(h.r + 0.4, '#d9502f', 0.12, 0.001); glow.position.set(h.x, h.y, 0.001); envGroup.add(glow); }
@@ -386,6 +385,7 @@ function postElements() {
     list.querySelectorAll('button[data-kind]').forEach(button => button.onclick = () => deleteElement(button.dataset.kind, Number(button.dataset.index)));
   }
   if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'elements', elements }, '*');
+  if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'editor-elements',elements},'*');
 }
 function deleteElement(kind, index) {
   const list = env[kind]; if (!Array.isArray(list) || !Number.isInteger(index) || !list[index]) return;
