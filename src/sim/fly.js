@@ -37,6 +37,7 @@ export class FlyAgent {
     this.synapseWeights = this.brain.weights || this.brain.graph?.weights || null;
     this.initialSynapseWeights = this.synapseWeights?.slice() || null;
     this.trainingEnabled = false;
+    this.obstaclesVisible = true;
     // hunger as hormones and octopamine (neuromod: { calib: neuromod.json, block }); needs brainOpts.neuromod, which
     // also removes the OA neurons' fast synapses from the graph
     const nmExtra = {};
@@ -218,7 +219,7 @@ export class FlyAgent {
     if (k === 'threat') return 0.03;
     if (k === 'floor') return 0.35 + 0.25 * (((Math.floor(x / 0.4) + Math.floor(y / 0.4)) & 1) ? 1 : 0);   // checker floor
     if (k === 'wall') { const a = Math.atan2(y, x); return 0.15 + 0.6 * ((Math.floor(a / (Math.PI / 12)) & 1) ? 1 : 0); }  // striped wall
-    if (k === 'food') return 0.9; if (k === 'bitter') return 0.5; if (k === 'hazard') return 0.6; if (k === 'obst') return 0.12; if (k === 'fly') return 0.08;
+    if (k === 'food') return 0.9; if (k === 'bitter') return 0.5; if (k === 'hazard') return 0.6; if (k === 'obst') return this.obstaclesVisible ? 0.8 : 0.12; if (k === 'fly') return 0.08;
     return 0.3;
   };
   /** advance 1 ms of simulated time */
