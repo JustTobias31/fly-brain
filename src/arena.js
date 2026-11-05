@@ -189,7 +189,7 @@ function buildScene(data) {
   brainCanvas.addEventListener('keydown', e => { const step=e.shiftKey?70:30; const k=e.key.toLowerCase(); if (!['w','a','s','d'].includes(k)) return; e.preventDefault(); if(k==='w')brainCam.position.z-=step; if(k==='s')brainCam.position.z+=step; if(k==='a')brainCam.position.x-=step; if(k==='d')brainCam.position.x+=step; brainCam.lookAt(0,0,0); });
 }
 let pd = null, remotePoseResume = false;
-let controllerView = 'arena', controllerBody = true, controllerVisionSource = 'arena';
+let controllerView = 'vision', controllerBody = true, controllerVisionSource = 'arena';
 function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
 function rebuildEnv() {
   // Placement rebuilds own their resources; release old GPU buffers/textures before replacing them.
