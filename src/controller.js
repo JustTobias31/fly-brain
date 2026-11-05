@@ -15,6 +15,7 @@ document.querySelector("#showBrain")?.addEventListener("click",()=>setView("brai
 document.querySelector("#showVision")?.addEventListener("click",()=>setView("vision"));
 document.querySelector("#showArena")?.addEventListener("click",()=>setView("arena"));
 document.querySelector("#gizmoVisible")?.addEventListener("change",e=>send("controller:gizmo-visible",{visible:e.target.checked}));
+document.querySelector("#obstaclesVisible")?.addEventListener("change",e=>send("controller:vision-obstacles",{enabled:e.target.checked}));
 document.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-tool]").forEach(x=>x.classList.toggle("active",x===b));send("controller:tool",{tool:b.dataset.tool});}));
 document.querySelector("#flyInfo")?.addEventListener("click",()=>togglePopup("flyPopup"));
 document.querySelector("#debugOpen")?.addEventListener("click",()=>togglePopup("debugPopup"));
