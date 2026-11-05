@@ -3,20 +3,20 @@ let socket=null,latestBody=null,latestActivity=null,pendingMetadata=[],activeVie
 const send=(type,data={})=>frame.contentWindow?.postMessage({source:"fly-controller",type,...data},"*");
 const logLine=s=>{log.textContent=(s+"\n"+log.textContent).slice(0,3500)};
 function setView(view){activeView=view;send("controller:view",{view})}
-document.querySelector("#run").onclick=()=>send("controller:run");
-document.querySelector("#pause").onclick=()=>send("controller:pause");
-document.querySelector("#stop").onclick=()=>{send("controller:pause");send("controller:reset-view")};
-document.querySelector("#build").onclick=()=>togglePopup("buildPopup");
-document.querySelector("#settingsOpen").onclick=()=>togglePopup("settingsPopup");
-document.querySelector("#showBrain").onclick=()=>setView("brain");
-document.querySelector("#showVision").onclick=()=>setView("vision");
-document.querySelector("#showArena").onclick=()=>setView("arena");
+document.querySelector("#run")?.addEventListener("click",()=>send("controller:run"));
+document.querySelector("#pause")?.addEventListener("click",()=>send("controller:pause"));
+document.querySelector("#stop")?.addEventListener("click",()=>{send("controller:pause");send("controller:reset-view")});
+document.querySelector("#build")?.addEventListener("click",()=>togglePopup("buildPopup"));
+document.querySelector("#settingsOpen")?.addEventListener("click",()=>togglePopup("settingsPopup"));
+document.querySelector("#showBrain")?.addEventListener("click",()=>()=>setView("brain");
+document.querySelector("#showVision")?.addEventListener("click",()=>()=>setView("vision");
+document.querySelector("#showArena")?.addEventListener("click",()=>()=>setView("arena");
 document.querySelector("#gizmoVisible")?.addEventListener("change",e=>send("controller:gizmo-visible",{visible:e.target.checked}));
 document.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-tool]").forEach(x=>x.classList.toggle("active",x===b));send("controller:tool",{tool:b.dataset.tool});}));
-document.querySelector("#flyInfo").onclick=()=>togglePopup("flyPopup");
-document.querySelector("#debugOpen").onclick=()=>togglePopup("debugPopup");
-document.querySelector("#visionSource").onclick=()=>document.querySelector("#externalVision").click();
-document.querySelector("#brainSettingsToggle").onclick=()=>{const el=document.querySelector("#brainSettings");el.hidden=!el.hidden};
+document.querySelector("#flyInfo")?.addEventListener("click",()=>togglePopup("flyPopup"));
+document.querySelector("#debugOpen")?.addEventListener("click",()=>togglePopup("debugPopup"));
+document.querySelector("#visionSource")?.addEventListener("click",()=>document.querySelector("#externalVision")?.click());
+document.querySelector("#brainSettingsToggle")?.addEventListener("click",()=>{const el=document.querySelector("#brainSettings");if(el)el.hidden=!el.hidden});
 function togglePopup(id){const el=document.querySelector("#"+id);el.hidden=!el.hidden}
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>document.querySelector("#"+b.dataset.close).hidden=true);
 document.querySelector("#resetView")?.addEventListener("click",()=>send("controller:reset-view"));
@@ -28,9 +28,9 @@ async function postSignal(path){const base=document.querySelector("#api").value.
 document.querySelector("#reward")?.addEventListener("click",()=>postSignal("reward"));
 document.querySelector("#punish")?.addEventListener("click",()=>postSignal("punish"));
 function connect(){if(socket&&socket.readyState===WebSocket.OPEN)return socket;if(socket)socket.close();const url=document.querySelector("#ws").value;socket=new WebSocket(url);socket.onopen=()=>{statusDot.style.background="#52c987";statusText.textContent="API connected";if(document.querySelector("#websocket"))document.querySelector("#websocket").checked=true;logLine("WebSocket connected");for(let i=0;i<pendingMetadata.length;i+=500)socket.send(JSON.stringify({type:"neurons:register",neurons:pendingMetadata.slice(i,i+500)}));logLine("Registered "+pendingMetadata.length+" neuron records")};socket.onclose=()=>{statusDot.style.background="#a34b4b";statusText.textContent="API disconnected";if(document.querySelector("#websocket"))document.querySelector("#websocket").checked=false;if(captureStream)stopExternalVision(false)};socket.onerror=()=>logLine("WebSocket connection failed");socket.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}if(m.type==="reward"||m.type==="punish")send("api:signal",{signal:m});else if(m.type==="sensory_input")send("api:sensory-input",{input:m});else if(m.type==="neuron:fire")send("api:neuron-fire",{command:m});else if(m.type==="arena:place")send("api:arena-place",{command:m});else if(m.type==="arena:remove")send("api:arena-remove",{command:m});else if(m.type==="vision:frame")send("api:vision-frame",{frame:m});else if(m.type==="vision:stop")send("api:vision-stop");else if(m.type==="arena:size"){document.querySelector("#arenaSize").value=m.radius*2;document.querySelector("#arenaSizeValue").value=m.radius*2;send("controller:arena-size",{radius:m.radius})}else if(m.type==="fly:pose")send("controller:fly-pose",{id:m.id,position:m.position,quaternion:m.quaternion});else if(m.type==="fly:pose:start")send("controller:pose-drag",{active:true});else if(m.type==="fly:pose:end")send("controller:pose-drag",{active:false});else if(m.type==="state")logLine("state: "+JSON.stringify(m.body||{}))};return socket}
-document.querySelector("#connect").onclick=connect;
-document.querySelector("#disconnect").onclick=()=>{if(socket){socket.close();socket=null}logLine("WebSocket disconnected")};
-document.querySelector("#health").onclick=async()=>{try{const r=await fetch(document.querySelector("#api").value.replace(/\\/$/,"")+"/health");logLine("GET /health: "+JSON.stringify(await r.json()))}catch(e){logLine("HTTP error: "+e.message)}};
+document.querySelector("#connect")?.addEventListener("click",()=>connect;
+document.querySelector("#disconnect")?.addEventListener("click",()=>()=>{if(socket){socket.close();socket=null}logLine("WebSocket disconnected")};
+document.querySelector("#health")?.addEventListener("click",()=>async()=>{try{const r=await fetch(document.querySelector("#api").value.replace(/\\/$/,"")+"/health");logLine("GET /health: "+JSON.stringify(await r.json()))}catch(e){logLine("HTTP error: "+e.message)}};
 document.querySelector("#websocket")?.addEventListener("change",e=>{if(e.target.checked)connect();else if(socket){if(captureStream)stopExternalVision(true);socket.close();socket=null}});
 function bytesToBase64(bytes){let binary="";for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(binary)}
 function captureFrame(now){if(!captureStream||!captureVideo)return;if(captureVideo.readyState<2||now-lastFrameAt<100){captureTimer=requestAnimationFrame(captureFrame);return}lastFrameAt=now;const w=160,h=90;captureContext.drawImage(captureVideo,0,0,w,h);const rgba=captureContext.getImageData(0,0,w,h).data,gray=new Uint8Array(w*h);for(let i=0,j=0;i<gray.length;i++,j+=4)gray[i]=Math.round(.2126*rgba[j]+.7152*rgba[j+1]+.0722*rgba[j+2]);if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"vision:frame",width:w,height:h,pixels:bytesToBase64(gray),image:captureCanvas.toDataURL("image/jpeg",.55)}));captureTimer=requestAnimationFrame(captureFrame)}
