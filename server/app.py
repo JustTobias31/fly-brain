@@ -6,6 +6,7 @@ import binascii
 import math
 import os
 import time
+import uuid
 from collections import defaultdict
 from typing import Any
 
@@ -31,6 +32,44 @@ neurons: dict[int, dict[str, Any]] = {}
 active_neuron_ids: set[int] = set()
 latest_state: dict[str, Any] = {"updated_at": None, "body": None, "activity": None}
 event_loop: asyncio.AbstractEventLoop | None = None
+sessions: dict[str, dict[str, Any]] = {}
+
+
+@app.post("/sessions")
+async def create_session():
+    session_id = uuid.uuid4().hex[:16]
+    sessions[session_id] = {"owner": None, "controllers": set(), "neurons": {}, "active_neuron_ids": set(), "state": {"updated_at": None, "body": None, "activity": None}, "created_at": time.time()}
+    return {"session_id": session_id, "websocket_path": f"/ws/{session_id}", "controller_url": f"/ws/{session_id}"}
+
+
+@app.delete("/sessions/{session_id}")
+async def close_session(session_id: str):
+    session = sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    owner = session.get("owner")
+    if owner is not None:
+        try:
+            await owner.send_json({"type": "session:close"})
+            await owner.close()
+        except Exception:
+            pass
+    for ws in tuple(session["controllers"]):
+        try:
+            await ws.send_json({"type": "session:offline"})
+            await ws.close()
+        except Exception:
+            pass
+    sessions.pop(session_id, None)
+    return {"closed": True, "session_id": session_id}
+
+
+@app.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    session = sessions.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"session_id": session_id, "owner_connected": session["owner"] is not None, "controller_clients": len(session["controllers"]), "registered_neurons": len(session["neurons"]), "updated_at": session["state"]["updated_at"]}
 
 
 class Signal(BaseModel):
@@ -68,6 +107,7 @@ async def health():
     return {
         "status": "ok",
         "websocket_clients": len(clients),
+        "active_sessions": len(sessions),
         "registered_neurons": len(neurons),
         "updated_at": latest_state["updated_at"],
     }
@@ -131,14 +171,65 @@ async def get_state():
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    await handle_websocket(ws)
+
+
+async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: str = "peer"):
+    global clients, neurons, active_neuron_ids, latest_state
+    session = sessions.get(session_id) if session_id else None
+    if session_id and session is None:
+        await ws.close(code=1008, reason="Unknown session")
+        return
     await ws.accept()
-    clients.add(ws)
+    if session is None:
+        clients.add(ws)
+        neurons = globals()["neurons"]
+        active_neuron_ids = globals()["active_neuron_ids"]
+        latest_state = globals()["latest_state"]
+    else:
+        if role not in {"owner", "controller"}:
+            await ws.close(code=1008, reason="Role must be owner or controller")
+            return
+        if role == "owner":
+            if session["owner"] is not None:
+                await ws.close(code=1008, reason="Session already has an owner")
+                return
+            session["owner"] = ws
+        else:
+            session["controllers"].add(ws)
+        neurons = session["neurons"]
+        active_neuron_ids = session["active_neuron_ids"]
+        latest_state = session["state"]
+    async def route(message: dict[str, Any], exclude: WebSocket | None = None) -> int:
+        if session is None:
+            return await route(message, exclude)
+        targets = (tuple(session["controllers"]) if role == "owner" else ((session["owner"],) if session["owner"] is not None else ()))
+        delivered = 0
+        stale = []
+        for target in targets:
+            if target is None or target is exclude:
+                continue
+            try:
+                await target.send_json(message)
+                delivered += 1
+            except Exception:
+                stale.append(target)
+        for target in stale:
+            session["controllers"].discard(target)
+            if session.get("owner") is target:
+                session["owner"] = None
+        return delivered
     vision_last_frame = 0.0
     try:
-        await ws.send_json({"type": "connected", "registered_neurons": len(neurons)})
+        await ws.send_json({"type": "connected", "session_id": session_id, "role": role, "registered_neurons": len(neurons), "state": latest_state})
         while True:
             message = await ws.receive_json()
             kind = message.get("type")
+            if session is not None:
+                owner_messages = {"neurons:register", "neurons:activity", "state", "vision:frame", "vision:stop"}
+                if (role == "owner" and kind not in owner_messages and kind != "ping") or (role == "controller" and kind in owner_messages):
+                    await ws.send_json({"type": "error", "error": f"Message type {kind} is not allowed for role {role}"})
+                    continue
             if kind == "neurons:register":
                 items = message.get("neurons", [])
                 if not isinstance(items, list):
@@ -167,7 +258,7 @@ async def websocket_endpoint(ws: WebSocket):
                     timestamp = time.time()
                     latest_state["activity"] = {"active_count": len(active_neuron_ids), "sampled_count": len(updates), "timestamp": timestamp}
                     latest_state["updated_at"] = timestamp
-                    await broadcast({"type": "neurons:activity", "neurons": updates, "activity": latest_state["activity"], "timestamp": timestamp}, exclude=ws)
+                    await route({"type": "neurons:activity", "neurons": updates, "activity": latest_state["activity"], "timestamp": timestamp}, exclude=ws)
             elif kind == "state":
                 timestamp = time.time()
                 latest_state.update({
@@ -175,9 +266,9 @@ async def websocket_endpoint(ws: WebSocket):
                     "activity": message.get("activity", latest_state["activity"]),
                     "updated_at": timestamp,
                 })
-                await broadcast({"type": "state", "body": latest_state["body"], "activity": latest_state["activity"], "updated_at": timestamp}, exclude=ws)
+                await route({"type": "state", "body": latest_state["body"], "activity": latest_state["activity"], "updated_at": timestamp}, exclude=ws)
             elif kind in ("reward", "punish"):
-                await broadcast({
+                await route({
                     "type": kind,
                     "intensity": max(0.0, min(100.0, float(message.get("intensity", 1.0)))),
                     "duration_ms": max(1, min(60000, int(message.get("duration_ms", 100)))),
@@ -188,7 +279,7 @@ async def websocket_endpoint(ws: WebSocket):
                 if modality not in {"vision", "olfaction", "gustation", "mechanosensation", "temperature", "other"}:
                     await ws.send_json({"type": "error", "error": "Unsupported sensory modality"})
                     continue
-                await broadcast({
+                await route({
                     "type": "sensory_input", "modality": modality,
                     "values": message.get("values", {}),
                     "duration_ms": max(1, min(60000, int(message.get("duration_ms", 100)))),
@@ -199,7 +290,7 @@ async def websocket_endpoint(ws: WebSocket):
                 if not isinstance(neuron_id, int) or neuron_id < 0:
                     await ws.send_json({"type": "error", "error": "id must be a non-negative integer"})
                     continue
-                await broadcast({
+                await route({
                     "type": "neuron:fire", "id": neuron_id,
                     "rate": max(0.0, min(1000.0, float(message.get("rate", 100.0)))),
                     "duration_ms": max(1, min(60000, int(message.get("duration_ms", 20)))),
@@ -214,7 +305,7 @@ async def websocket_endpoint(ws: WebSocket):
                 except (TypeError, ValueError):
                     await ws.send_json({"type": "error", "error": "x and y must be numbers"})
                     continue
-                await broadcast({
+                await route({
                     "type": kind, "kind": message.get("kind"),
                     "x": x, "y": y, "timestamp": time.time(),
                 })
@@ -227,13 +318,13 @@ async def websocket_endpoint(ws: WebSocket):
                 if not math.isfinite(radius) or not 2 <= radius <= 50:
                     await ws.send_json({"type": "error", "error": "radius must be between 2 and 50"})
                     continue
-                await broadcast({"type": "arena:size", "radius": radius, "timestamp": time.time()}, exclude=ws)
+                await route({"type": "arena:size", "radius": radius, "timestamp": time.time()}, exclude=ws)
             elif kind in ("fly:pose:start", "fly:pose:end"):
                 fly_id = message.get("id")
                 if not isinstance(fly_id, int) or fly_id < 0:
                     await ws.send_json({"type": "error", "error": "id must be a non-negative integer"})
                     continue
-                await broadcast({"type": kind, "id": fly_id, "timestamp": time.time()}, exclude=ws)
+                await route({"type": kind, "id": fly_id, "timestamp": time.time()}, exclude=ws)
             elif kind == "fly:pose":
                 fly_id = message.get("id")
                 position, quaternion = message.get("position"), message.get("quaternion")
@@ -248,7 +339,7 @@ async def websocket_endpoint(ws: WebSocket):
                     await ws.send_json({"type": "error", "error": "quaternion must not be zero"})
                     continue
                 quaternion = [v / norm for v in quaternion]
-                await broadcast({"type": "fly:pose", "id": fly_id, "position": position, "quaternion": quaternion, "timestamp": time.time()}, exclude=ws)
+                await route({"type": "fly:pose", "id": fly_id, "position": position, "quaternion": quaternion, "timestamp": time.time()}, exclude=ws)
             elif kind == "vision:frame":
                 now = time.monotonic()
                 if now - vision_last_frame < 0.075:
@@ -269,9 +360,9 @@ async def websocket_endpoint(ws: WebSocket):
                 if not isinstance(image, str) or not image.startswith("data:image/jpeg;base64,") or len(image) > 250000:
                     image = None
                 vision_last_frame = now
-                await broadcast({"type": "vision:frame", "width": width, "height": height, "pixels": pixels, "image": image, "timestamp": time.time()})
+                await route({"type": "vision:frame", "width": width, "height": height, "pixels": pixels, "image": image, "timestamp": time.time()})
             elif kind == "vision:stop":
-                await broadcast({"type": "vision:stop", "timestamp": time.time()})
+                await route({"type": "vision:stop", "timestamp": time.time()})
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
             else:
@@ -280,3 +371,18 @@ async def websocket_endpoint(ws: WebSocket):
         pass
     finally:
         clients.discard(ws)
+        if session is not None:
+            if role == "owner" and session.get("owner") is ws:
+                session["owner"] = None
+                for controller in tuple(session["controllers"]):
+                    try:
+                        await controller.send_json({"type": "session:offline"})
+                    except Exception:
+                        session["controllers"].discard(controller)
+            elif role == "controller":
+                session["controllers"].discard(ws)
+
+
+@app.websocket("/ws/{session_id}")
+async def session_websocket_endpoint(ws: WebSocket, session_id: str, role: str = Query(default="controller")):
+    await handle_websocket(ws, session_id, role)
