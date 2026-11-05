@@ -333,7 +333,7 @@ function attachPoseGizmo() {
 }
 // ---------------- UI ----------------
 function buildUI() {
-  if (window.parent === window) $('#play').onclick = () => { setSimulationState(running ? 'paused' : 'running'); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
+  $('#play').onclick = () => { setSimulationState(running ? 'paused' : 'running'); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; }; $('#stop').onclick = () => { setSimulationState('stopped'); $('#play').textContent = '▶ Run'; };
   $('#addFly').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2); };
   $('#addFemale').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2, 'f'); };
   $('#speed').oninput = e => { speed = +e.target.value; $('#speedv').textContent = speed.toFixed(2) + '×'; for (const f of flies) f.worker.postMessage({ type: 'speed', speed }); };
@@ -347,6 +347,7 @@ function buildUI() {
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
   $('#takeoff').onclick = () => flies.find(x => x.id === selected)?.worker.postMessage({ type: 'takeoff' });
+   $('#moveFly').onclick = () => { transformControls.setMode('translate'); $('#moveFly').classList.add('on'); $('#rotateFly').classList.remove('on'); }; $('#rotateFly').onclick = () => { transformControls.setMode('rotate'); $('#rotateFly').classList.add('on'); $('#moveFly').classList.remove('on'); }; $('#gizmoEnabled').onchange = e => { transformControls.enabled = e.target.checked; transformControls.visible = e.target.checked; poseGizmo.visible = e.target.checked && !!flies.find(x => x.id === selected)?.last; };
   buildScaffoldUI();
   setInterval(() => { if (foodDirty) { foodDirty = false; syncEnv(); envGroup.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); }); } renderFlyList(); }, 500);
 }
@@ -591,9 +592,9 @@ window.addEventListener('message', e => {
   } else if (m.type === 'controller:view') {
     controllerView = m.view;
     const arena = controllerView === 'arena';
-    $('#panel').hidden = true;
-    $('#brainpanel').hidden = arena;
-    $('#c').style.display = arena ? 'block' : 'none';
+    $('#panel').hidden = false;
+    $('#brainpanel').hidden = true;
+    $('#c').style.display = 'block';
     if (!arena) {
       const eyes = $('#bpBody .eyes'), groupsEl = $('#groups'), brain = $('#brain');
       eyes.hidden = controllerView !== 'vision' || controllerVisionSource === 'external';
