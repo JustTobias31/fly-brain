@@ -221,6 +221,10 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
     vision_last_frame = 0.0
     try:
         await ws.send_json({"type": "connected", "session_id": session_id, "role": role, "registered_neurons": len(neurons), "state": latest_state, "simulation_status": session.get("simulation_status", "stopped") if session else None})
+        if session is not None and role == "controller" and neurons:
+            metadata = list(neurons.values())
+            for start in range(0, len(metadata), 500):
+                await ws.send_json({"type": "neurons:metadata", "neurons": metadata[start:start + 500]})
         while True:
             message = await ws.receive_json()
             kind = message.get("type")
@@ -234,11 +238,22 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 if not isinstance(items, list):
                     await ws.send_json({"type": "error", "error": "neurons must be an array"})
                     continue
+                valid_items = []
                 for item in items:
                     if not isinstance(item, dict) or not isinstance(item.get("id"), int):
                         continue
                     neurons[item["id"]] = item
+                    valid_items.append(item)
                 await ws.send_json({"type": "neurons:registered", "count": len(neurons)})
+                if session is not None and role == "owner" and valid_items:
+                    stale = []
+                    for controller in tuple(session["controllers"]):
+                        try:
+                            await controller.send_json({"type": "neurons:metadata", "neurons": valid_items})
+                        except Exception:
+                            stale.append(controller)
+                    for controller in stale:
+                        session["controllers"].discard(controller)
             elif kind == "neurons:activity":
                 updates = message.get("neurons", [])
                 if isinstance(updates, list):
