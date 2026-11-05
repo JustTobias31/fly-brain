@@ -735,6 +735,7 @@ window.addEventListener('message', e => {
       } else if(action==='place'){
         const kind=kinds[element],pos=validVec(cmd.position,3)?cmd.position:[0,0,0];
         if(!kind){ack(false,{},'Unsupported element type');}
+        else if(kind==='obstacles'&&env.obstacles.length>=128){ack(false,{},'The arena has reached its 128-block limit');}
         else{
           const props=cmd.properties||{},o={x:pos[0],y:pos[1]};
           if(kind==='obstacles')Object.assign(o,{type:'box',sx:Number(props.sx??props.size?.[0]??0.2),sy:Number(props.sy??props.size?.[1]??0.2),sz:Number(props.sz??props.size?.[2]??0.3),z:validVec(cmd.position,3)?pos[2]:0.15,rotation:0});
