@@ -66,6 +66,16 @@ onmessage = async (e) => {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     postMessage({ type: 'activity', id: fly.id, trace: fly.brain.trace.slice(0), t: fly.t, groups: meter.read(fly.brain.spikeCount, fly.t), eyes });
   }
+  else if (m.type === 'circuit:list') {
+    postMessage({ type: 'circuit:list:result', requestId: m.requestId, flyId: fly.id, groups: meter.groups.map((g, i) => ({ key: g.key, label: g.label, count: g.L.length + g.R.length, leftCount: g.L.length, rightCount: g.R.length, info: g.info })) });
+  }
+  else if (m.type === 'circuit:read') {
+    const group = meter.groups.find(g => g.key === m.group || g.label.toLowerCase() === String(m.group || '').toLowerCase());
+    if (!group) { postMessage({ type: 'circuit:read:result', requestId: m.requestId, flyId: fly.id, error: 'Unknown circuit group' }); return; }
+    const leftRate = meter.rate[meter.groups.indexOf(group) * 2], rightRate = meter.rate[meter.groups.indexOf(group) * 2 + 1];
+    const neurons = [...new Set([...group.L, ...group.R])].map(id => ({ id, type: fly.data.meta.types[id], side: group.L.includes(id) && group.R.includes(id) ? 'both' : group.R.includes(id) ? 'right' : 'left', activity: fly.brain.trace[id] || 0, spikeCount: fly.brain.spikeCount[id] || 0 }));
+    postMessage({ type: 'circuit:read:result', requestId: m.requestId, flyId: fly.id, group: { key: group.key, label: group.label, count: neurons.length, leftCount: group.L.length, rightCount: group.R.length, leftHz: leftRate, rightHz: rightRate, info: group.info }, neurons });
+  }
 };
 function setProxies() {
   const d = fly.mjd;
