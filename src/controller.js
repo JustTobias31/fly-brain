@@ -57,5 +57,6 @@ resizeHandle?.addEventListener("pointermove",e=>{if(resizing)setArenaSplit(e.cli
 function stopArenaResize(){if(!resizing)return;resizing=false;resizeHandle.classList.remove("dragging");}
 resizeHandle?.addEventListener("pointerup",stopArenaResize);resizeHandle?.addEventListener("pointercancel",stopArenaResize);
 resizeHandle?.addEventListener("keydown",e=>{if(e.key!=="ArrowLeft"&&e.key!=="ArrowRight")return;e.preventDefault();const current=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--arena-split"))||62;document.documentElement.style.setProperty("--arena-split",Math.max(25,Math.min(82,current+(e.key==="ArrowRight"?2:-2)))+"%")});
-\n// Start the arena session automatically; the API/session is required for the controller to work.
+
+// Start the arena session automatically; the API/session is required for the controller to work.
 if(document.querySelector("#websocket")?.checked)enableSession();
