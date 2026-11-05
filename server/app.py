@@ -407,7 +407,15 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 found_ids = {n.get("id") for n in selected}
                 found_names = {str(n.get("name", n.get("type", ""))).casefold() for n in selected}
                 missing = [v for v in (ids or []) if v not in found_ids] + [v for v in (names or []) if v.casefold() not in found_names]
-                await ws.send_json({"type": "neurons:read:result", "requestId": message.get("requestId"), "neurons": selected, "missing": missing})
+                try:
+                    offset = max(0, int(message.get("offset", 0)))
+                    limit = max(1, min(500, int(message.get("limit", 500))))
+                except (TypeError, ValueError):
+                    await ws.send_json({"type": "error", "error": "offset and limit must be integers", "requestId": message.get("requestId")})
+                    continue
+                batch = selected[offset:offset + limit]
+                next_offset = offset + len(batch) if offset + len(batch) < len(selected) else None
+                await ws.send_json({"type": "neurons:read:result", "requestId": message.get("requestId"), "neurons": batch, "missing": missing, "total": len(selected), "offset": offset, "nextOffset": next_offset})
             elif kind in {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "scaffold:set"} and session is not None and role == "controller":
                 delivered = await route(message, exclude=ws)
                 if delivered == 0:
