@@ -212,7 +212,7 @@ function buildScene(data) {
   }
   addEventListener('resize', () => { resolution.reset(); resize(); }); resize();
   envGroup = new THREE.Group(); scene.add(envGroup); rebuildEnv();
-  if (window.parent !== window) $('#panel').hidden = true;
+  // Keep the original left-middle arena controls visible inside the controller iframe.
   batches = new ArenaBatches(scene, visual, FLY_CAP);
   raycaster = new THREE.Raycaster();
   renderer.domElement.addEventListener('pointerdown', e => { pd = [e.clientX, e.clientY]; });
