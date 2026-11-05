@@ -103,7 +103,44 @@ let brainColorFly = -1, brainColorHover = -2;
 const shadowCenter = new THREE.Vector3(Infinity, Infinity, Infinity), viewPoint = new THREE.Vector3();
 const viewFrustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4(), flyBounds = new THREE.Sphere(new THREE.Vector3(), 0.24);
 const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUploads: 0, brainDraws: 0 };
-let brainRenderer, brainScene, brainCam, brainControls, brainPts, brainAct;
+let brainRenderer, brainScene, brainCam, brainControls, brainPts, brainAct, brainRadius = 1;
+const cameraKeys = new Set();
+let cameraMode = 'arena', cameraMoveAt = performance.now();
+const cameraForward = new THREE.Vector3(), cameraRight = new THREE.Vector3(), cameraUp = new THREE.Vector3(), cameraMove = new THREE.Vector3();
+function setCameraMode(mode) { cameraMode = mode; cameraKeys.clear(); cameraMoveAt = performance.now(); }
+function handleCameraKey(e, down) {
+  if (!['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE','ShiftLeft','ShiftRight'].includes(e.code)) return;
+  if (e.target.closest?.('input,select,textarea,button,[contenteditable="true"]')) return;
+  if (cameraMode === 'brain' && document.activeElement !== $('#brain')) return;
+  if (cameraMode === 'arena' && document.activeElement !== $('#c')) return;
+  e.preventDefault(); if (down) cameraKeys.add(e.code); else cameraKeys.delete(e.code);
+}
+addEventListener('keydown', e => handleCameraKey(e, true));
+addEventListener('keyup', e => handleCameraKey(e, false));
+addEventListener('blur', () => cameraKeys.clear());
+function moveFreeCamera(now) {
+  if (!cameraKeys.size) { cameraMoveAt = now; return; }
+  const dt = Math.min(0.05, Math.max(0, (now - cameraMoveAt) / 1000)); cameraMoveAt = now;
+  const brain = cameraMode === 'brain', cam = brain ? brainCam : camera, orbit = brain ? brainControls : controls;
+  if (!cam || !orbit) return;
+  cam.getWorldDirection(cameraForward);
+  if (!brain) { cameraForward.z = 0; if (cameraForward.lengthSq() < 1e-8) cameraForward.set(0, 1, 0); }
+  cameraForward.normalize(); cameraUp.copy(brain ? cam.up : new THREE.Vector3(0, 0, 1)).normalize();
+  cameraRight.crossVectors(cameraForward, cameraUp).normalize();
+  cameraMove.set(0, 0, 0);
+  if (cameraKeys.has('KeyW')) cameraMove.add(cameraForward);
+  if (cameraKeys.has('KeyS')) cameraMove.sub(cameraForward);
+  if (cameraKeys.has('KeyD')) cameraMove.add(cameraRight);
+  if (cameraKeys.has('KeyA')) cameraMove.sub(cameraRight);
+  if (cameraKeys.has('KeyE')) cameraMove.add(cameraUp);
+  if (cameraKeys.has('KeyQ')) cameraMove.sub(cameraUp);
+  if (!cameraMove.lengthSq()) return;
+  cameraMove.normalize();
+  const distance = cam.position.distanceTo(orbit.target), speed = Math.max(brain ? brainRadius * 0.18 : 0.15, distance * 0.8) * ((cameraKeys.has('ShiftLeft') || cameraKeys.has('ShiftRight')) ? 3 : 1);
+  cameraMove.multiplyScalar(speed * dt);
+  cam.position.add(cameraMove); orbit.target.add(cameraMove);
+  if (!brain && $('#follow').checked) $('#follow').checked = false;
+}
 function buildScene(data) {
   renderer = new THREE.WebGLRenderer({ canvas: $('#c'), antialias: false, powerPreference: 'high-performance' });
   resolution = new RenderResolution(() => resize(), { targetFps: 120 });
@@ -119,6 +156,7 @@ function buildScene(data) {
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
   camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
+  renderer.domElement.tabIndex = 0; renderer.domElement.addEventListener('pointerdown', () => { renderer.domElement.focus({ preventScroll: true }); setCameraMode('arena'); });
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5; camera.far = Math.max(100, env.arena.radius * 8); camera.updateProjectionMatrix();
   transformControls = new TransformControls(camera, renderer.domElement); transformControls.setMode('translate'); transformControls.size = 0.75;
   poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
@@ -191,6 +229,8 @@ function buildScene(data) {
   brainCam.far = brainRadius * 40;
   brainCam.position.set(0, 0, initialDistance); brainCam.lookAt(0, 0, 0); brainCam.updateProjectionMatrix(); brainAct = new Float32Array(data.N);
   const brainCanvas = $('#brain');
+  brainCanvas.tabIndex = 0;
+  brainCanvas.addEventListener('pointerdown', () => { brainCanvas.focus({ preventScroll: true }); setCameraMode('brain'); });
   brainControls = new OrbitControls(brainCam, brainCanvas);
   brainControls.target.set(0, 0, 0);
   brainControls.enableDamping = true;
@@ -548,6 +588,7 @@ function animate() {
   }
   const sf = flies.find(x => x.id === selected);
   if (!gizmoDragging && sf?.last) syncPoseGizmo(sf);
+  moveFreeCamera(now);
   if (sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
   updateThreat(); controls.update();
@@ -585,6 +626,7 @@ function animate() {
     col.needsUpdate = true; brainDirty = false; brainColorFly = selected; brainColorHover = hover; metrics.brainUploads++;
   }
   if (hover !== hlShown) showGroupInInset(hover);
+  if (cameraMode === 'brain') moveFreeCamera(now);
   brainControls?.update(); hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
 
 }
