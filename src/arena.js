@@ -270,7 +270,7 @@ function rebuildEnv() {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cx = cv.getContext('2d');
   for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { cx.fillStyle = ((i + j) & 1) ? '#9c907a' : '#6f6554'; cx.fillRect(i * 32, j * 32, 32, 32); }
   const tex = new THREE.CanvasTexture(cv); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set((R + 0.2) * 2 / 0.8, (R + 0.2) * 2 / 0.8); tex.magFilter = THREE.LinearFilter; tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); tex.colorSpace = THREE.SRGBColorSpace;
-  floorMesh = new THREE.Mesh(env.arena.shape === 'square' ? new THREE.PlaneGeometry(R * 2, R * 2) : new THREE.CircleGeometry(R + 0.1, 96), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
+  floorMesh = new THREE.Mesh(env.arena.shape === 'square' ? new THREE.PlaneGeometry(env.arena.sizeX||R*2,env.arena.sizeY||R*2) : new THREE.CircleGeometry(R + 0.1, 96), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 }));
   floorMesh.receiveShadow = true; envGroup.add(floorMesh);
   // striped boundary walls, square for the editable baseplate and circular for other presets
   if (env.arena.walls !== false) {
@@ -393,13 +393,13 @@ function deleteElement(kind, index) {
   const list = env[kind]; if (!Array.isArray(list) || !Number.isInteger(index) || !list[index]) return;
   list.splice(index, 1); rebuildEnv(); syncEnv(); postElements();
 }
-function setArenaRadius(radius) {
-  radius = Math.max(2, Math.min(50, Number(radius)));
-  if (!Number.isFinite(radius)) return;
-  env.arena.radius = radius; rebuildEnv(); controls.maxDistance = radius * 5; camera.far = Math.max(100, radius * 8); camera.updateProjectionMatrix();
-  for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'arena:size', radius });
-  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'arena-config', radius }, '*');
+function setArenaSize(x,y=x) {
+  x=Math.max(.1,Math.min(100,Number(x)));y=Math.max(.1,Math.min(100,Number(y)));if(!Number.isFinite(x)||!Number.isFinite(y))return;
+  env.arena.sizeX=x;env.arena.sizeY=y;env.arena.radius=Math.max(x,y)/2;env.arena.shape='square';rebuildEnv();controls.maxDistance=Math.max(x,y)*2.5;camera.far=Math.max(100,Math.max(x,y)*4);camera.updateProjectionMatrix();
+  for(const f of flies)if(f.ready)f.worker.postMessage({type:'arena:size',radius:env.arena.radius});
+  if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'arena-config',sizeX:x,sizeY:y,radius:env.arena.radius},'*');
 }
+function setArenaRadius(radius){setArenaSize(Number(radius)*2,Number(radius)*2);}
 function syncPoseGizmo(f) {
   if (!transformControls || transformControls.object === null || gizmoFlyId !== f.id) return;
   const bi = f.bodyNames?.indexOf('thorax') ?? -1; if (bi < 0 || !f.last?.xpos || !f.last?.xquat) return;
