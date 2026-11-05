@@ -173,13 +173,23 @@ function buildScene(data) {
   brainScene = new THREE.Scene(); brainCam = new THREE.PerspectiveCamera(40, bw / bh, 1, 20000);
   const pos = new Float32Array(data.N * 3), col = new Float32Array(data.N * 3); const c = new THREE.Vector3(); let n = 0;
   for (let i = 0; i < data.N; i++) { const x = data.soma[i * 3]; if (!Number.isFinite(x)) { pos[i * 3] = 1e6; continue; } pos[i * 3] = x * 8e-3; pos[i * 3 + 1] = data.soma[i * 3 + 1] * 8e-3; pos[i * 3 + 2] = data.soma[i * 3 + 2] * 8e-3; c.x += pos[i * 3]; c.y += pos[i * 3 + 1]; c.z += pos[i * 3 + 2]; n++; }
-  c.divideScalar(n); for (let i = 0; i < data.N; i++) { pos[i * 3] -= c.x; pos[i * 3 + 1] -= c.y; pos[i * 3 + 2] -= c.z; col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0.12; }
+  c.divideScalar(n);
+  let brainRadius = 0;
+  for (let i = 0; i < data.N; i++) {
+    pos[i * 3] -= c.x; pos[i * 3 + 1] -= c.y; pos[i * 3 + 2] -= c.z;
+    col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = 0.12;
+    if (Number.isFinite(data.soma[i * 3])) brainRadius = Math.max(brainRadius, Math.hypot(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]));
+  }
+  brainRadius = Math.max(brainRadius, 1);
   const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('color', new THREE.BufferAttribute(col, 3).setUsage(THREE.DynamicDrawUsage));
-  brainPts = new THREE.Points(bg, new THREE.PointsMaterial({ size: 1.3, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }));
+  brainPts = new THREE.Points(bg, new THREE.PointsMaterial({ size: 1.7, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.95, depthWrite: false }));
   brainPts.rotation.x = Math.PI; brainScene.add(brainPts);
   hlPts = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, transparent: true, opacity: 1, depthWrite: false, depthTest: false }));
   hlPts.visible = false; brainScene.add(hlPts);
-  brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
+  const initialDistance = brainRadius / Math.sin(THREE.MathUtils.degToRad(brainCam.fov / 2)) * 1.15;
+  brainCam.near = Math.max(0.001, brainRadius / 10000);
+  brainCam.far = brainRadius * 40;
+  brainCam.position.set(0, 0, initialDistance); brainCam.lookAt(0, 0, 0); brainCam.updateProjectionMatrix(); brainAct = new Float32Array(data.N);
   const brainCanvas = $('#brain');
   brainControls = new OrbitControls(brainCam, brainCanvas);
   brainControls.target.set(0, 0, 0);
@@ -189,8 +199,8 @@ function buildScene(data) {
   brainControls.zoomSpeed = 0.9;
   brainControls.panSpeed = 0.8;
   brainControls.enablePan = true;
-  brainControls.minDistance = 80;
-  brainControls.maxDistance = 6500;
+  brainControls.minDistance = brainRadius * 0.12;
+  brainControls.maxDistance = brainRadius * 25;
   brainControls.update();
   brainCanvas.style.cursor = 'grab';
 }
