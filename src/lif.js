@@ -42,6 +42,7 @@ export class LIFNetwork {
     this.t = 0; this._g2 = null;
     this._setupRing();
   }
+  setSynapseWeights(weights) { if (!weights || weights.length !== this.weights.length) throw new Error('Synapse weight count mismatch'); this.weights.set(weights); }
   wake(i) { if (!this.awake[i]) { this.awake[i] = 1; this.awakeList[this.nAwake++] = i; } }
   _setupRing() { const d = Math.max(1, Math.round(this.p.delay / this.p.dt)); this.ring = Array.from({ length: d + 1 }, () => []); this.head = 0; }
   setParams(q) { const od = this.p.delay, odt = this.p.dt; Object.assign(this.p, q); if (this.p.delay !== od || this.p.dt !== odt) this._setupRing(); }
