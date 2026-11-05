@@ -765,6 +765,7 @@ window.addEventListener('message', e => {
       else ack(false,{},'target.type must be element or fly');
     } else if(cmd.type==='arena:list'){
       const elements=[];for(const [key,list] of Object.entries(env)){if(!Array.isArray(list))continue;for(const o of list){o._apiId ||= 'element-'+crypto.randomUUID();elements.push({id:o._apiId,type:o.type||key,name:o._apiName||o.odor||key,position:[o.x||0,o.y||0,o.z??(o.sz||0)/2],rotation:Array.isArray(o.rotation)?o.rotation:[0,0,Math.sin((Number(o.rotation)||0)/2),Math.cos((Number(o.rotation)||0)/2)],properties:{...o}});}}
+      for(const f of flies){const bi=f.bodyNames?.indexOf('thorax')??-1,p=bi*3,q=bi*4,pos=f.last?.xpos,quat=f.last?.xquat;if(bi>=0&&pos&&quat){elements.push({id:f.id,type:'fly',name:f.apiName||'fly '+f.id,position:Array.from(pos.slice(p,p+3)),rotation:[quat[q+1],quat[q+2],quat[q+3],quat[q]],properties:{sex:f.sex,alive:f.last.alive!==false}});}}
       reply('api:command-result',{requestId:cmd.requestId,ok:true,result:{type:'arena:list:result',elements}});
     } else if(cmd.type==='loom:trigger'){const f=flies.find(x=>x.id===selected&&x.last);if(!f)ack(false,{},'No ready fly is selected');else{launchThreat();ack(true);}}
     else if(cmd.type==='fly:takeoff'){const targets=cmd.flyId==null?[findFly(selected)].filter(Boolean):[findFly(cmd.flyId)].filter(Boolean);if(!targets.length)ack(false,{},'Fly not found');else{for(const f of targets)f.worker.postMessage({type:'takeoff'});ack(true,{flyIds:targets.map(f=>f.id)});}}
