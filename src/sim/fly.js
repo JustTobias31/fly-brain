@@ -138,6 +138,7 @@ export class FlyAgent {
       // MuJoCo computes geom_rbound when the XML is compiled. These editor slots
       // were compiled as tiny placeholders, so update the broad-phase bound too
       // or raycasts can reject a correctly resized block before testing its shape.
+      M.geom_aabb.set([0, 0, 0, sx, sy, sz / 2], id * 6);
       M.geom_rbound[id] = Math.hypot(sx, sy, sz / 2);
       M.geom_pos.set([o.x, o.y, sz / 2], id * 3);
     }
