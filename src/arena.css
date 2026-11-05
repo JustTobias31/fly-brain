@@ -50,3 +50,5 @@ a { color: var(--acc); }
 #scaffolds .scf { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .transformTools{margin:8px 0}.transformTools button.on{background:var(--acc);color:#1a1200;border-color:transparent}.transformTools label{margin-left:auto}
+
+#elements{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow:auto}.envElement{display:flex;align-items:center;gap:8px;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:rgba(255,255,255,.025)}.envElement>div{min-width:0;flex:1}.envElement strong{display:block;font-size:12px;font-weight:500}.envElement small{display:block;color:var(--dim);font-size:10px}.envElement button{flex:none;padding:1px 8px;color:#ff9b9b;border-color:#60383d;background:#24151a;font-size:17px;line-height:20px}.envElement button:hover{background:#3a1d23}
