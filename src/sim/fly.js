@@ -16,7 +16,7 @@ const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x ax
 
 export class FlyAgent {
   constructor({ mj, flyXML, env, data, size, sign, bodymap, gait, id = 0, pos = [0, 0], yaw = 0, nProxies = 0, mode = 'descending', brainOpts = {}, vision = true, brain = null, flyvis = null, intrinsic = true, seed = 0, neuromod = null, sex = 'm' }) {
-    this.id = id; this.mj = mj; this.env = env; this.data = data; this.vision = vision; this.sex = sex; this.bodyEnabled = true; this.cmd = { v: 0, turn: 0 };
+    this.id = id; this.mj = mj; this.env = env; this.data = data; this.vision = vision; this.sex = sex; this.bodyEnabled = true; this.motion = { movement: true, rotation: true }; this.cmd = { v: 0, turn: 0 };
     this.model = mj.MjModel.from_xml_string(buildWorldXML(flyXML, env, { flyPos: [pos[0], pos[1], 0.132], flyYaw: yaw, nProxies }));
     this.mjd = new mj.MjData(this.model);
     this.physPerMs = Math.round(0.001 / this.model.opt.timestep);
@@ -84,7 +84,24 @@ export class FlyAgent {
     d.qpos[a + 3] = q[3]; d.qpos[a + 4] = q[0]; d.qpos[a + 5] = q[1]; d.qpos[a + 6] = q[2];
     d.qvel.fill(0, this.rootDof, this.rootDof + 6);
     this.mj.mj_forward(this.model, d);
+    this.captureMotionAnchor();
     return true;
+  }
+  captureMotionAnchor() {
+    if (this.rootQpos < 0) return;
+    const q = this.mjd.qpos, a = this.rootQpos;
+    this.motionAnchor = { position: Array.from(q.slice(a, a + 3)), rotation: Array.from(q.slice(a + 3, a + 7)) };
+  }
+  setMotionOptions(options = {}) {
+    const next = { movement: options.movement !== false, rotation: options.rotation !== false };
+    if ((this.motion.movement && !next.movement) || (this.motion.rotation && !next.rotation)) this.captureMotionAnchor();
+    this.motion = next; this.applyMotionLocks();
+  }
+  applyMotionLocks() {
+    if (this.rootQpos < 0 || !this.motionAnchor) return;
+    const a = this.rootQpos, d = this.mjd, v = this.rootDof, anchor = this.motionAnchor;
+    if (!this.motion.movement) { d.qpos.set(anchor.position, a); d.qvel.fill(0, v, v + 3); }
+    if (!this.motion.rotation) { d.qpos.set(anchor.rotation, a + 3); d.qvel.fill(0, v + 3, v + 6); }
   }
   syncObstacles() {
     const M = this.model;
@@ -271,8 +288,8 @@ export class FlyAgent {
         this.cmd.flying = this.flight.active; this.cmd.flight = this.flight.label();
       }
       const dtSub = 1000 * M.opt.timestep;
-      for (let s = 0; s < this.physPerMs; s++) { if (this.flight.active) this.flight.substep(dtSub); mj.mj_step(M, d); }
-  
+      for (let s = 0; s < this.physPerMs; s++) { this.applyMotionLocks(); if (this.flight.active) this.flight.substep(dtSub); mj.mj_step(M, d); this.applyMotionLocks(); }
+      if (!this.motion.movement || !this.motion.rotation) mj.mj_forward(M, d);
     }
     this.t += 1;
     if (this.bodyEnabled) this.physiology(st);
