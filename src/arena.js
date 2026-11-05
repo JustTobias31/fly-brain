@@ -189,6 +189,7 @@ function buildScene(data) {
   brainCanvas.addEventListener('keydown', e => { const step=e.shiftKey?70:30; const k=e.key.toLowerCase(); if (!['w','a','s','d'].includes(k)) return; e.preventDefault(); if(k==='w')brainCam.position.z-=step; if(k==='s')brainCam.position.z+=step; if(k==='a')brainCam.position.x-=step; if(k==='d')brainCam.position.x+=step; brainCam.lookAt(0,0,0); });
 }
 let pd = null, remotePoseResume = false;
+let gizmoVisible = true;
 let controllerView = 'vision', controllerBody = true, controllerVisionSource = 'arena';
 function discMesh(r, color, opacity = 1, z = 0.0015) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.8 })); m.position.z = z; m.receiveShadow = true; return m; }
 function rebuildEnv() {
@@ -298,7 +299,6 @@ function broadcastOthers() {
 function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'env', env }); }
 
 function postElements() {
-  if (window.parent === window) return;
   const elements = [];
   const add = (kind, list, label) => list.forEach((o, index) => elements.push({ kind, index, label, x: o.x, y: o.y }));
   add('food', env.food, 'Sugar');
@@ -306,11 +306,16 @@ function postElements() {
   add('hazards', env.hazards, 'Heat patch');
   add('obstacles', env.obstacles, 'Block');
   add('odors', env.odors, 'Odor');
-  window.parent.postMessage({ source: 'fly-arena', type: 'elements', elements }, '*');
+  const list = $('#elements');
+  if (list) {
+    list.innerHTML = elements.length ? elements.map(o => `<div class="envElement"><div><strong>${o.label}</strong><small>(${Number(o.x || 0).toFixed(2)}, ${Number(o.y || 0).toFixed(2)})</small></div><button type="button" data-kind="${o.kind}" data-index="${o.index}" title="Delete ${o.label}">×</button></div>`).join('') : '<p class="note">No placed objects yet.</p>';
+    list.querySelectorAll('button[data-kind]').forEach(button => button.onclick = () => deleteElement(button.dataset.kind, Number(button.dataset.index)));
+  }
+  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'elements', elements }, '*');
 }
 function deleteElement(kind, index) {
   const list = env[kind]; if (!Array.isArray(list) || !Number.isInteger(index) || !list[index]) return;
-  list.splice(index, 1); rebuildEnv(); syncEnv();
+  list.splice(index, 1); rebuildEnv(); syncEnv(); postElements();
 }
 function setArenaRadius(radius) {
   radius = Math.max(2, Math.min(50, Number(radius)));
@@ -327,9 +332,17 @@ function syncPoseGizmo(f) {
   poseGizmo.quaternion.set(qv[q + 1], qv[q + 2], qv[q + 3], qv[q]);
 }
 function attachPoseGizmo() {
-  const f = controllerBody ? flies.find(x => x.id === selected && x.ready) : null;
-  if (!f) { transformControls.detach(); poseGizmo.visible = false; gizmoFlyId = -1; return; }
-  gizmoFlyId = f.id; syncPoseGizmo(f); poseGizmo.visible = true; transformControls.attach(poseGizmo);
+  const f = controllerBody && gizmoVisible ? flies.find(x => x.id === selected && x.ready) : null;
+  if (!f) { transformControls.detach(); poseGizmo.visible = false; gizmoFlyId = -1; transformControls.getHelper().visible = gizmoVisible; return; }
+  gizmoFlyId = f.id; syncPoseGizmo(f); poseGizmo.visible = true; transformControls.attach(poseGizmo); transformControls.getHelper().visible = true;
+}
+function setGizmoVisible(visible) {
+  gizmoVisible = !!visible;
+  transformControls.enabled = gizmoVisible;
+  transformControls.getHelper().visible = gizmoVisible;
+  if (!gizmoVisible) { transformControls.detach(); poseGizmo.visible = false; gizmoFlyId = -1; }
+  else attachPoseGizmo();
+  const checkbox = $('#gizmoEnabled'); if (checkbox) checkbox.checked = gizmoVisible;
 }
 // ---------------- UI ----------------
 function buildUI() {
@@ -347,7 +360,7 @@ function buildUI() {
   $('#light').oninput = e => { env.light.sky = +e.target.value; scene.background = new THREE.Color().setHSL(0.6, 0.3, 0.02 + 0.05 * env.light.sky); syncEnv(); };
   $('#threat').onclick = () => launchThreat();
   $('#takeoff').onclick = () => flies.find(x => x.id === selected)?.worker.postMessage({ type: 'takeoff' });
-   $('#moveFly').onclick = () => { transformControls.setMode('translate'); $('#moveFly').classList.add('on'); $('#rotateFly').classList.remove('on'); }; $('#rotateFly').onclick = () => { transformControls.setMode('rotate'); $('#rotateFly').classList.add('on'); $('#moveFly').classList.remove('on'); }; $('#gizmoEnabled').onchange = e => { transformControls.enabled = e.target.checked; transformControls.visible = e.target.checked; poseGizmo.visible = e.target.checked && !!flies.find(x => x.id === selected)?.last; };
+   $('#moveFly').onclick = () => { transformControls.setMode('translate'); $('#moveFly').classList.add('on'); $('#rotateFly').classList.remove('on'); }; $('#rotateFly').onclick = () => { transformControls.setMode('rotate'); $('#rotateFly').classList.add('on'); $('#moveFly').classList.remove('on'); }; $('#gizmoEnabled').onchange = e => setGizmoVisible(e.target.checked);
   buildScaffoldUI();
   setInterval(() => { if (foodDirty) { foodDirty = false; syncEnv(); envGroup.children.forEach(m => { if (m.userData.food) m.material.opacity = 0.35 + 0.65 * Math.min(1, m.userData.food.amount / 5); }); } renderFlyList(); }, 500);
 }
@@ -567,7 +580,7 @@ window.addEventListener('message', e => {
   if (m.type === 'controller:gizmo-mode') {
     transformControls.setMode(m.mode === 'rotate' ? 'rotate' : 'translate');
   } else if (m.type === 'controller:gizmo-visible') {
-    transformControls.visible = !!m.visible; transformControls.enabled = !!m.visible; poseGizmo.visible = !!m.visible && !!flies.find(x => x.id === selected)?.last;
+    setGizmoVisible(m.visible);
   } else if (m.type === 'controller:tool') {
     tool = ['food','odor','bitter','hazard','obstacle','co2','none'].includes(m.tool) ? m.tool : 'none';
   } else if (m.type === 'controller:arena-size') {
