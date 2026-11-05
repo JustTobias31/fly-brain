@@ -261,7 +261,15 @@ Use `element:command` for arena objects and flies:
 - `properties`: optional initial properties for a newly placed element.
 - `name`: optional display/name value for the created element.
 
-**Fly creation shortcut:** when `action` is `place` and `element` is `fly` or `fly female` (case-insensitive), create a fly instead of an arena prop. The optional `name` can identify the new fly. The server/simulation should return the newly assigned ID.
+**Fly creation shortcut:** when `action` is `place` and `element` is `fly` or `fly female` (case-insensitive), create a fly instead of an arena prop. The optional `name` can identify the new fly. On success, include the assigned display name in the success/acknowledgement packet as a top-level `name` field, formatted as `fly <idx>` (for example, `"fly 0"`). Also include the new fly's ID in `result.id`.
+
+Example successful response:
+
+```json
+{"type":"ack","requestId":"el-1","ok":true,"name":"fly 0","result":{"id":0}}
+```
+
+The `idx` is the index assigned by the simulation to that newly created fly.
 
 ### 3. Change an element or fly property
 
@@ -310,6 +318,31 @@ Return every current arena element, including its stable ID, type, position, rot
 ```
 
 This starts the existing loom-threat sequence. It is a trigger command, not a request to create a new arena object.
+
+### 11. Get a fly's position and rotation
+
+Request the current transform of one fly:
+
+```json
+{"type":"fly:transform:get","flyId":0,"requestId":"transform-1"}
+```
+
+Expected reply:
+
+```json
+{
+  "type":"fly:transform:result",
+  "requestId":"transform-1",
+  "flyId":0,
+  "position":[0,0,0.132],
+  "rotation":[0,0,0,1]
+}
+```
+
+- `flyId`: ID/index of the fly to query.
+- `position`: current world-space position as `[x,y,z]`.
+- `rotation`: current orientation as quaternion `[x,y,z,w]`, matching the format used by `fly:pose`.
+- Return the latest simulation transform. If the fly does not exist, return an error instead of a fabricated/default transform.
 
 ### 6. Make a fly take off
 
