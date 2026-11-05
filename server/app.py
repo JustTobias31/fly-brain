@@ -201,7 +201,7 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
         latest_state = session["state"]
     async def route(message: dict[str, Any], exclude: WebSocket | None = None) -> int:
         if session is None:
-            return await route(message, exclude)
+            return await broadcast(message, exclude)
         targets = (tuple(session["controllers"]) if role == "owner" else ((session["owner"],) if session["owner"] is not None else ()))
         delivered = 0
         stale = []
