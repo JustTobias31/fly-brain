@@ -457,7 +457,7 @@ function buildScaffoldUI() {
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
-  if(editorActive&&editorMode==='select'){const hits=raycaster.intersectObjects(envGroup.children.filter(o=>o.userData.editorObject),false);if(hits.length){const ref=hits[0].object.userData.editorObject;selectEditorObject(ref.kind,ref.index);return;}selectEditorObject(null,-1);return;}
+  if(editorActive&&editorMode==='select'){const hits=raycaster.intersectObjects(envGroup.children.filter(o=>o.userData.editorObject),false);if(hits.length){const ref=hits[0].object.userData.editorObject;selectEditorObject(ref.kind,ref.index);return;}selectEditorObject(null,-1);return;}if(editorActive&&editorMode==='place'&&tool!=='none'){/* continue to floor placement below */}else if(editorActive){return;}
   for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); attachPoseGizmo(); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
