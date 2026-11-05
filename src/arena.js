@@ -40,7 +40,7 @@ const FLY_CAP = Math.min(MAX_FLIES, Math.max(1, Math.floor(Number(new URLSearchP
 const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(location.search).get('vision') || '').toLowerCase());
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
-let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
+let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, trainingEnabled = false;
 function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';const play=$('#play');if(play)play.textContent=running?'❚❚ Pause':'▶ Run';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
@@ -341,11 +341,16 @@ async function addFly(pos, yaw, sex = 'm') {
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
+  worker.postMessage({ type: 'motion', options: motionOptions });
+  worker.postMessage({ type: 'training', enabled: trainingEnabled });
   renderFlyList();
   return f;
 }
 function onWorker(f, m) {
-  if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); f.worker.postMessage({ type: 'arena:size', radius: env.arena.radius }); if (!controllerBody) for (const g of f.bodyGroups) if (g) g.visible = false; buildWingBlur(f, m.wingPoses); f.onReady?.(); }
+  if (m.type === 'brain:export') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-export', N: m.N, E: m.E, weights: m.weights }, '*', [m.weights]); }
+  else if (m.type === 'brain:imported') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-imported', ok: m.ok, error: m.error }, '*'); }
+  else if (m.type === 'training-result') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'training-result', changed: m.changed, signal: m.signal }, '*'); }
+  else if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); f.worker.postMessage({ type: 'arena:size', radius: env.arena.radius }); if (!controllerBody) for (const g of f.bodyGroups) if (g) g.visible = false; buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
     if (window.parent !== window) { const bi = Math.max(0, f.bodyNames?.indexOf('thorax') ?? 0), orientation = m.xquat ? Array.from(m.xquat.slice(bi * 4, bi * 4 + 4)) : [0, 0, Math.sin((m.yaw || 0) / 2), Math.cos((m.yaw || 0) / 2)]; window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', body: { id: f.id, position: m.pos, yaw: m.yaw, orientation } }, '*'); }
@@ -666,9 +671,18 @@ window.addEventListener('message', e => {
     setSimulationState(m.type === 'controller:run' ? 'running' : 'paused');
   } else if (m.type === 'controller:stop') {
     setSimulationState('stopped');
-  } else if (m.type === 'controller:body') {
-    controllerBody = !!m.enabled;
-    for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; } attachPoseGizmo();
+  } else if (m.type === 'controller:movement-enabled') {
+    motionOptions.movement = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'motion', options: motionOptions });
+  } else if (m.type === 'controller:rotation-enabled') {
+    motionOptions.rotation = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'motion', options: motionOptions });
+  } else if (m.type === 'controller:training') {
+    trainingEnabled = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'training', enabled: trainingEnabled });
+  } else if (m.type === 'controller:brain-export') {
+    const f = flies.find(x => x.id === selected && x.ready); if (f) f.worker.postMessage({ type: 'brain:export' });
+    else if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-imported', ok: false, error: 'No ready fly is selected' }, '*');
+  } else if (m.type === 'controller:brain-import') {
+    const f = flies.find(x => x.id === selected && x.ready); if (f && m.weights instanceof ArrayBuffer) f.worker.postMessage({ type: 'brain:import', N: m.N, E: m.E, weights: m.weights }, [m.weights]);
+    else if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-imported', ok: false, error: 'No ready fly is selected' }, '*');
   } else if (m.type === 'controller:vision-source') {
     controllerVisionSource = (m.visionSource || m.source) === 'external' ? 'external' : 'arena';
     if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external screen share.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
