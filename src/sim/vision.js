@@ -17,7 +17,7 @@ export class FlyVisionFV {
     for (const sd of this.sides) for (const d of fvmap.eyes[sd].dirs) { const h = toHead(d); this.dHead.set(h, r * 3); r++; }
     this.vec = new Array(this.n * 3).fill(0);
     this.gid = new mj.IntBuffer(this.n); this.dist = new mj.DoubleBuffer(this.n); this.normal = new mj.DoubleBuffer(this.n * 3);
-    this.lum = new Float32Array(this.n); this.groups = [1, 0, 0, 0, 1, 0];
+    this.lum = new Float32Array(this.n); this.groups = [1, 1, 0, 0, 1, 0]; // include group 1: editor obstacles are assigned there
     this.pairs = this.sides.map(sd => { const p = fvmap.eyes[sd].pairs; return { neuron: Int32Array.from(p, x => x[0]), node: Int32Array.from(p, x => x[1]) }; });
     // photoreceptors -> nearest column of their eye
     this.photo = []; this.photoCol = [];
