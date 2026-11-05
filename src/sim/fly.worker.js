@@ -74,7 +74,8 @@ onmessage = async (e) => {
     if (!group) { postMessage({ type: 'circuit:read:result', requestId: m.requestId, flyId: fly.id, error: 'Unknown circuit group' }); return; }
     meter.read(fly.brain.spikeCount, fly.t);
     const leftRate = meter.rate[meter.groups.indexOf(group) * 2], rightRate = meter.rate[meter.groups.indexOf(group) * 2 + 1];
-    const neurons = [...new Set([...group.L, ...group.R])].map(id => ({ id, type: fly.data.meta.types[id], side: group.L.includes(id) && group.R.includes(id) ? 'both' : group.R.includes(id) ? 'right' : 'left', activity: fly.brain.trace[id] || 0, spikeCount: fly.brain.spikeCount[id] || 0 }));
+    const left = new Set(group.L), right = new Set(group.R);
+    const neurons = [...new Set([...group.L, ...group.R])].map(id => ({ id, type: fly.data.meta.types[id], side: left.has(id) && right.has(id) ? 'both' : right.has(id) ? 'right' : 'left', activity: fly.brain.trace[id] || 0, spikeCount: fly.brain.spikeCount[id] || 0 }));
     postMessage({ type: 'circuit:read:result', requestId: m.requestId, flyId: fly.id, group: { key: group.key, label: group.label, count: neurons.length, leftCount: group.L.length, rightCount: group.R.length, leftHz: leftRate, rightHz: rightRate, info: group.info }, neurons });
   }
 };
