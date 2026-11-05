@@ -113,7 +113,7 @@ function setupFreeLook(canvas, cam, brain = false) {
   const state = { yaw: brain ? Math.atan2(dir.x, -dir.z) : Math.atan2(dir.y, dir.x), pitch: Math.asin(THREE.MathUtils.clamp(brain ? dir.y : dir.z, -1, 1)), pointer: null };
   lookState.set(canvas, state); canvas.style.cursor = 'grab';
   canvas.addEventListener('pointerdown', e => { if (e.button !== 0 || (!brain && gizmoDragging)) return; state.pointer = [e.pointerId,e.clientX,e.clientY]; canvas.setPointerCapture(e.pointerId); canvas.style.cursor='grabbing'; setCameraMode(brain?'brain':'arena'); });
-  canvas.addEventListener('pointermove', e => { if (!state.pointer || state.pointer[0] !== e.pointerId) return; const dx=e.clientX-state.pointer[1], dy=e.clientY-state.pointer[2]; state.pointer[1]=e.clientX; state.pointer[2]=e.clientY; state.yaw -= dx*0.004; state.pitch=THREE.MathUtils.clamp(state.pitch-dy*0.004,-Math.PI/2+0.01,Math.PI/2-0.01);
+  canvas.addEventListener('pointermove', e => { if (!state.pointer || state.pointer[0] !== e.pointerId || (!brain && gizmoDragging)) return; const dx=e.clientX-state.pointer[1], dy=e.clientY-state.pointer[2]; state.pointer[1]=e.clientX; state.pointer[2]=e.clientY; const direction = brain ? 1 : -1; state.yaw += direction*dx*0.004; state.pitch=THREE.MathUtils.clamp(state.pitch+direction*dy*0.004,-Math.PI/2+0.01,Math.PI/2-0.01);
     const cp=Math.cos(state.pitch), d=brain ? new THREE.Vector3(Math.sin(state.yaw)*cp,Math.sin(state.pitch),-Math.cos(state.yaw)*cp) : new THREE.Vector3(Math.cos(state.pitch)*Math.cos(state.yaw),Math.cos(state.pitch)*Math.sin(state.yaw),Math.sin(state.pitch));
     cam.up.copy(up); cam.lookAt(cam.position.clone().add(d)); });
   const end = e => { if (state.pointer?.[0]===e.pointerId) { state.pointer=null; canvas.style.cursor='grab'; } };
@@ -149,7 +149,7 @@ function moveFreeCamera(now) {
   if (cameraKeys.has('KeyQ')) cameraMove.sub(cameraUp);
   if (!cameraMove.lengthSq()) return;
   cameraMove.normalize();
-  const speed = (brain ? brainRadius * 0.18 : 0.15) * ((cameraKeys.has('ShiftLeft') || cameraKeys.has('ShiftRight')) ? 3 : 1);
+  const speed = (brain ? brainRadius * 0.18 : 0.15) * 6 * ((cameraKeys.has('ShiftLeft') || cameraKeys.has('ShiftRight')) ? 3 : 1);
   cameraMove.multiplyScalar(speed * dt); cam.position.add(cameraMove);
   if (!brain && $('#follow').checked) $('#follow').checked = false;
 }
@@ -173,7 +173,7 @@ function buildScene(data) {
   transformControls = new TransformControls(camera, renderer.domElement); transformControls.setMode('translate'); transformControls.size = 0.75;
   poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
   transformControls.addEventListener('dragging-changed', e => {
-    controls.enabled = !e.value;
+    controls.enabled = false;
     if (e.value) { gizmoDragging = true; resumeAfterGizmo = running; if (running) setSimulationState('paused');
       if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: true, id: gizmoFlyId }, '*');
     } else { gizmoDragging = false; if (resumeAfterGizmo) setSimulationState('running'); resumeAfterGizmo = false;
