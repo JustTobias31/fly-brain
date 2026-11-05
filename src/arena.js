@@ -40,6 +40,7 @@ const FLY_CAP = Math.min(MAX_FLIES, Math.max(1, Math.floor(Number(new URLSearchP
 const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(location.search).get('vision') || '').toLowerCase());
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
+let editorActive=false, editorMode='select';
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, trainingEnabled = false;
 function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';const play=$('#play');if(play)play.textContent=running?'❚❚ Pause':'▶ Run';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
@@ -652,7 +653,11 @@ function animate() {
 window.addEventListener('message', e => {
   if (e.source !== window.parent || e.data?.source !== 'fly-controller') return;
   const m = e.data;
-  if (m.type === 'controller:gizmo-mode') {
+  if (m.type === 'controller:editor') { editorActive=!!m.enabled; document.body.classList.toggle('editor-mode',editorActive); if(editorActive){setSimulationState('paused');tool='none';}else{tool='none';transformControls.detach();} }
+  else if (m.type === 'controller:editor-mode') { editorMode=m.mode||'select'; if(editorMode==='remove')tool='remove'; else if(['translate','rotate','scale'].includes(editorMode)){tool='none';transformControls.setMode(editorMode==='scale'?'scale':editorMode);} else tool='none'; }
+  else if (m.type === 'controller:arena-export') { const blob=new Blob([JSON.stringify(env,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='fly-arena.json';a.click();URL.revokeObjectURL(url); }
+  else if (m.type === 'controller:arena-import' && m.env && typeof m.env==='object') { for(const key of ['food','bitterPatches','hazards','obstacles','odors'])if(Array.isArray(m.env[key]))env[key]=m.env[key]; if(m.env.arena)env.arena={...env.arena,...m.env.arena}; rebuildEnv();syncEnv();postElements(); }
+  else if (m.type === 'controller:gizmo-mode') {
     transformControls.setMode(m.mode === 'rotate' ? 'rotate' : 'translate');
   } else if (m.type === 'controller:gizmo-visible') {
     setGizmoVisible(m.visible);
