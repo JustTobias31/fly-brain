@@ -18,7 +18,7 @@ import { SCAFFOLD_IDS, createScaffoldSet } from './sim/scaffold/index.js';
 const BASE = import.meta.env.BASE_URL; // "/" in dev, "/fly-brain/" on GitHub Pages
 
 const $ = s => document.querySelector(s);
-const status = s => { $('#status').textContent = s; };
+const status = s => { $('#status').textContent = s; if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'loading-status', message: s }, '*'); };
 const FLY_COLORS = ['#ffb347', '#5ac8fa', '#a3e635', '#f472b6', '#c084fc', '#facc15', '#fb7185', '#2dd4bf'];
 const presetKey = new URLSearchParams(location.search).get('env') || 'empty';
 const PRESET = PRESETS[presetKey] || PRESETS.empty;
@@ -644,7 +644,7 @@ window.addEventListener('message', e => {
   }
 });
 
-main().catch(e => { if ($('#status')) status('error: ' + e.message); console.error(e); });
+main().catch(e => { const message = e?.stack || e?.message || String(e); if ($('#status')) status('error: ' + (e?.message || e)); if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'loading-error', message }, '*'); console.error(e); });
 
 // side panels fold to their title bar (chevron button, or the [ and ] keys); the choice persists
 function setupFolds() {
