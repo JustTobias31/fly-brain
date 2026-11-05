@@ -106,6 +106,19 @@ const metrics = { calls: 0, triangles: 0, renderMs: 0, shadowUpdates: 0, brainUp
 let brainRenderer, brainScene, brainCam, brainControls, brainPts, brainAct, brainRadius = 1;
 const cameraKeys = new Set();
 let cameraMode = 'arena', cameraMoveAt = performance.now();
+const lookState = new WeakMap();
+function setupFreeLook(canvas, cam, brain = false) {
+  const up = brain ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+  const dir = new THREE.Vector3(); cam.getWorldDirection(dir);
+  const state = { yaw: brain ? Math.atan2(dir.x, -dir.z) : Math.atan2(dir.y, dir.x), pitch: Math.asin(THREE.MathUtils.clamp(brain ? dir.y : dir.z, -1, 1)), pointer: null };
+  lookState.set(canvas, state); canvas.style.cursor = 'grab';
+  canvas.addEventListener('pointerdown', e => { if (e.button !== 0 || (!brain && gizmoDragging)) return; state.pointer = [e.pointerId,e.clientX,e.clientY]; canvas.setPointerCapture(e.pointerId); canvas.style.cursor='grabbing'; setCameraMode(brain?'brain':'arena'); });
+  canvas.addEventListener('pointermove', e => { if (!state.pointer || state.pointer[0] !== e.pointerId) return; const dx=e.clientX-state.pointer[1], dy=e.clientY-state.pointer[2]; state.pointer[1]=e.clientX; state.pointer[2]=e.clientY; state.yaw -= dx*0.004; state.pitch=THREE.MathUtils.clamp(state.pitch-dy*0.004,-Math.PI/2+0.01,Math.PI/2-0.01);
+    const cp=Math.cos(state.pitch), d=brain ? new THREE.Vector3(Math.sin(state.yaw)*cp,Math.sin(state.pitch),-Math.cos(state.yaw)*cp) : new THREE.Vector3(Math.cos(state.pitch)*Math.cos(state.yaw),Math.cos(state.pitch)*Math.sin(state.yaw),Math.sin(state.pitch));
+    cam.up.copy(up); cam.lookAt(cam.position.clone().add(d)); });
+  const end = e => { if (state.pointer?.[0]===e.pointerId) { state.pointer=null; canvas.style.cursor='grab'; } };
+  canvas.addEventListener('pointerup',end); canvas.addEventListener('pointercancel',end); canvas.addEventListener('wheel',e=>{e.preventDefault();cam.getWorldDirection(cameraForward);cam.position.addScaledVector(cameraForward,Math.sign(e.deltaY)*Math.max(brain?brainRadius*0.08:0.08,cam.position.length()*0.08));},{passive:false});
+}
 const cameraForward = new THREE.Vector3(), cameraRight = new THREE.Vector3(), cameraUp = new THREE.Vector3(), cameraMove = new THREE.Vector3();
 function setCameraMode(mode) { cameraMode = mode; cameraKeys.clear(); cameraMoveAt = performance.now(); }
 function handleCameraKey(e, down) {
@@ -136,9 +149,8 @@ function moveFreeCamera(now) {
   if (cameraKeys.has('KeyQ')) cameraMove.sub(cameraUp);
   if (!cameraMove.lengthSq()) return;
   cameraMove.normalize();
-  const distance = cam.position.distanceTo(orbit.target), speed = Math.max(brain ? brainRadius * 0.18 : 0.15, distance * 0.8) * ((cameraKeys.has('ShiftLeft') || cameraKeys.has('ShiftRight')) ? 3 : 1);
-  cameraMove.multiplyScalar(speed * dt);
-  cam.position.add(cameraMove); orbit.target.add(cameraMove);
+  const speed = (brain ? brainRadius * 0.18 : 0.15) * ((cameraKeys.has('ShiftLeft') || cameraKeys.has('ShiftRight')) ? 3 : 1);
+  cameraMove.multiplyScalar(speed * dt); cam.position.add(cameraMove);
   if (!brain && $('#follow').checked) $('#follow').checked = false;
 }
 function buildScene(data) {
@@ -155,8 +167,8 @@ function buildScene(data) {
   room.dispose(); pmrem.dispose();
   camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
   camera.position.set(-1.2, -1.6, 1.3);
-  controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.target.set(0, 0, 0.1);
-  renderer.domElement.tabIndex = 0; renderer.domElement.addEventListener('pointerdown', () => { renderer.domElement.focus({ preventScroll: true }); setCameraMode('arena'); });
+  controls = new OrbitControls(camera, renderer.domElement); controls.enabled = false; controls.enableDamping = false; controls.target.set(0, 0, 0.1);
+  renderer.domElement.tabIndex = 0; renderer.domElement.addEventListener('pointerdown', () => { renderer.domElement.focus({ preventScroll: true }); setCameraMode('arena'); }); setupFreeLook(renderer.domElement,camera,false);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5; camera.far = Math.max(100, env.arena.radius * 8); camera.updateProjectionMatrix();
   transformControls = new TransformControls(camera, renderer.domElement); transformControls.setMode('translate'); transformControls.size = 0.75;
   poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
@@ -231,8 +243,8 @@ function buildScene(data) {
   const brainCanvas = $('#brain');
   brainCanvas.tabIndex = 0;
   brainCanvas.addEventListener('pointerdown', () => { brainCanvas.focus({ preventScroll: true }); setCameraMode('brain'); });
-  brainControls = new OrbitControls(brainCam, brainCanvas);
-  brainControls.target.set(0, 0, 0);
+  brainControls = new OrbitControls(brainCam, brainCanvas); brainControls.enabled = false;
+  brainControls.target.set(0, 0, 0); setupFreeLook(brainCanvas,brainCam,true);
   brainControls.enableDamping = true;
   brainControls.dampingFactor = 0.075;
   brainControls.rotateSpeed = 0.7;
@@ -591,7 +603,7 @@ function animate() {
   moveFreeCamera(now);
   if (sf?.last && $('#follow').checked) { const p = sf.last.pos; followDelta.set(p[0], p[1], p[2]).sub(controls.target).multiplyScalar(0.1); controls.target.add(followDelta); camera.position.add(followDelta); }
   if (sf?.last) { const t = sf.last.t / 1000; $('#simt').textContent = t.toFixed(2); if (now - lastSimReal > 1000) { $('#rt').textContent = ((t - lastSim) / ((now - lastSimReal) / 1000)).toFixed(2); lastSim = t; lastSimReal = now; } }
-  updateThreat(); controls.update();
+  updateThreat();
   camera.updateMatrixWorld();
   viewFrustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   let largest = 0;
@@ -627,7 +639,7 @@ function animate() {
   }
   if (hover !== hlShown) showGroupInInset(hover);
   if (cameraMode === 'brain') moveFreeCamera(now);
-  brainControls?.update(); hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
+  hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
 
 }
 
