@@ -57,7 +57,7 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
     const o = env.obstacles[k];
     const active = !!o;
     const sx = o?.sx ?? 0.2, sy = o?.sy ?? 0.2, sz = o?.sz ?? 0.3;
-    parts.push(`<geom name="obst${k}" type="box" size="${active ? sx : 0.001} ${active ? sy : 0.001} ${active ? sz / 2 : 0.001}" pos="${active ? o.x : 0} ${active ? o.y : 0} ${active ? sz / 2 : -20}" euler="0 0 ${active ? (o.rotation || 0) : 0}" rgba=".25 .3 .25 1" group="1" contype="${active ? 2 : 0}" conaffinity="${active ? 2 : 0}" friction="${a.wallFriction ?? 0.1}"/>`);
+    parts.push(`<geom name="obst${k}" type="box" size="${active ? sx : 0.001} ${active ? sy : 0.001} ${active ? sz / 2 : 0.001}" pos="${active ? o.x : 0} ${active ? o.y : 0} ${active ? (o.z ?? sz / 2) : -20}" euler="0 0 ${active ? (o.rotation || 0) : 0}" rgba=".25 .3 .25 1" group="1" contype="${active ? 2 : 0}" conaffinity="${active ? 2 : 0}" friction="${a.wallFriction ?? 0.1}"/>`);
   }
   // food and patches are flat visual discs (no collision), seen by the eyes
   env.food.forEach((f, k) => parts.push(`<geom name="food${k}" type="cylinder" size="${f.r} 0.002" pos="${f.x} ${f.y} 0.002" rgba=".95 .8 .3 1" contype="0" conaffinity="0" group="0"/>`));
