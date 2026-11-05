@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fly Brain · Controller</title><link rel="stylesheet" href="/src/controller.css"></head>
 <body>
-<iframe id="simulation" src="/arena.html" title="Fly simulation"></iframe>
+<iframe id="simulation" title="Fly simulation"></iframe>
 <main class="rightLayout"><section class="panel"><header><span class="eyebrow">LIVE FEED</span><strong>What the fly sees</strong><button id="visionSource" title="Choose external vision">↗</button></header><div id="visionContent"><p class="placeholder">Waiting for fly vision…</p></div></section><section class="panel"><header><span class="eyebrow">NEURAL ACTIVITY</span><strong>Brain viewer</strong><button id="brainSettingsToggle" title="Brain settings">⚙</button></header><div id="brainContent"><p class="placeholder">Waiting for brain visualization…</p></div><div id="brainSettings" hidden><label>Activity display <select id="activityDisplay"><option value="active">Active neurons</option><option value="all">All registered neurons</option></select></label><label>Activity scale <input id="activityScale" type="range" min="1" max="10" value="1"><output>1×</output></label></div></section></main><nav class="toolbar" aria-label="Controller tools">
   <div class="mark">FB</div>
   <button id="run" title="Start simulation" aria-label="Start">▶</button><button id="pause" title="Pause simulation" aria-label="Pause">Ⅱ</button><button id="stop" title="Stop simulation" aria-label="Stop">■</button>
