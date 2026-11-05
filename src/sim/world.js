@@ -1,6 +1,8 @@
 // Builds the MuJoCo world for one fly: the flybody fly (mesh-free physics), a walled arena with
 // obstacles and food discs, and kinematic (mocap) proxies standing in for the other flies.
 // Units follow flybody: cm, g, s. The floor is z = 0; a standing fly's thorax sits at z ~ 0.13.
+export const MAX_OBSTACLES = 128;
+
 export const DEFAULT_ENV = {
   arena: { radius: 2.5, wallHeight: 1.2, segments: 48, wallFriction: 1, walls: true },    // head/body grip walls; legs slide along them (see buildWorldXML); tall enough to fly in
   food: [
@@ -49,10 +51,14 @@ export function buildWorldXML(flyXML, env, { flyPos = [0, 0, 0.13], flyYaw = 0, 
     const x = (a.radius + t) * Math.cos(th), y = (a.radius + t) * Math.sin(th);
     parts.push(`<geom name="wall${k}" type="box" size="${t} ${len.toFixed(4)} ${h / 2}" pos="${x.toFixed(4)} ${y.toFixed(4)} ${h / 2}" euler="0 0 ${th.toFixed(4)}" rgba=".35 .35 .38 1" group="0" contype="2" conaffinity="2" friction="${friction}"/>`);
   }
-  env.obstacles.forEach((o, k) => {
-    if (o.type === 'box') parts.push(`<geom name="obst${k}" type="box" size="${o.sx} ${o.sy} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="1" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
-    else parts.push(`<geom name="obst${k}" type="cylinder" size="${o.r} ${o.sz / 2}" pos="${o.x} ${o.y} ${o.sz / 2}" rgba=".25 .3 .25 1" group="0" contype="2" conaffinity="2" friction="${a.wallFriction ?? 0.1}"/>`);
-  });
+  // MuJoCo models have a fixed geom count. Reserve slots so blocks added in the editor
+  // can be moved into the physics/vision world without rebuilding every fly's model.
+  for (let k = 0; k < MAX_OBSTACLES; k++) {
+    const o = env.obstacles[k];
+    const active = !!o;
+    const sx = o?.sx ?? 0.2, sy = o?.sy ?? 0.2, sz = o?.sz ?? 0.3;
+    parts.push(`<geom name="obst${k}" type="box" size="${active ? sx : 0.001} ${active ? sy : 0.001} ${active ? sz / 2 : 0.001}" pos="${active ? o.x : 0} ${active ? o.y : 0} ${active ? sz / 2 : -20}" rgba=".25 .3 .25 1" group="1" contype="${active ? 2 : 0}" conaffinity="${active ? 2 : 0}" friction="${a.wallFriction ?? 0.1}"/>`);
+  }
   // food and patches are flat visual discs (no collision), seen by the eyes
   env.food.forEach((f, k) => parts.push(`<geom name="food${k}" type="cylinder" size="${f.r} 0.002" pos="${f.x} ${f.y} 0.002" rgba=".95 .8 .3 1" contype="0" conaffinity="0" group="0"/>`));
   env.bitterPatches.forEach((f, k) => parts.push(`<geom name="bitter${k}" type="cylinder" size="${f.r} 0.002" pos="${f.x} ${f.y} 0.002" rgba=".3 .55 .85 1" contype="0" conaffinity="0" group="0"/>`));
