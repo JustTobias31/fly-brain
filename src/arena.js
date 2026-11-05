@@ -181,11 +181,12 @@ function buildScene(data) {
       if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: false, id: gizmoFlyId }, '*'); }
   });
   transformControls.addEventListener('objectChange', () => {
-    if(editorActive&&editorSelected){const obj=env[editorSelected.kind]?.[editorSelected.index];if(!obj)return;obj.x=editorGizmo.position.x;obj.y=editorGizmo.position.y;if(obj.type==='box'){obj.sx=Math.max(.05,editorGizmo.scale.x*.2);obj.sy=Math.max(.05,editorGizmo.scale.y*.2);obj.sz=Math.max(.05,editorGizmo.scale.z*.3);}else if('r'in obj)obj.r=Math.max(.05,obj.r*editorGizmo.scale.x);obj.rotation=editorGizmo.rotation.z;rebuildEnv();syncEnv();return;}const f = flies.find(x => x.id === gizmoFlyId); if (!f?.ready) return;
+    if(editorActive&&editorSelected){const obj=env[editorSelected.kind]?.[editorSelected.index];if(!obj)return;obj.x=editorGizmo.position.x;obj.y=editorGizmo.position.y;if(obj.type==='box'){obj.sx=Math.max(.05,editorGizmo.scale.x*.2);obj.sy=Math.max(.05,editorGizmo.scale.y*.2);obj.sz=Math.max(.05,editorGizmo.scale.z*.3);}else if('r'in obj)obj.r=Math.max(.05,obj.r*editorGizmo.scale.x);obj.rotation=editorGizmo.rotation.z;shadowDirty=true;return;}const f = flies.find(x => x.id === gizmoFlyId); if (!f?.ready) return;
     const position = poseGizmo.position.toArray(), quaternion = [poseGizmo.quaternion.x, poseGizmo.quaternion.y, poseGizmo.quaternion.z, poseGizmo.quaternion.w];
     f.worker.postMessage({ type: 'set_pose', position, quaternion });
     if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose', id: f.id, position, quaternion }, '*');
   });
+  transformControls.addEventListener('mouseUp', () => { if(editorActive&&editorSelected){rebuildEnv();syncEnv();postElements();postEditorSelection();} });
   scene.add(new THREE.HemisphereLight('#f4f2ed', '#514432', 0.22));
   sun = new THREE.DirectionalLight('#fff1da', 2.7); sun.position.set(3, 2, 8); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.00002; sun.shadow.normalBias = 0.0003; sun.shadow.radius = 2;
