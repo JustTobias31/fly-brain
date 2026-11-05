@@ -376,7 +376,38 @@ Omit both `ids` and `names` to request the available neuron readout. Expected re
 
 Return the latest available values for each matched neuron. Unknown IDs/names are reported in `missing`. Results are paged in batches of up to 500; use `offset` and `limit` to retrieve later batches. The reply includes `total`, `offset`, and `nextOffset`.
 
-### 8. Set the scaffold
+### 8. Read selectable circuit groups
+
+List the available groups for a fly:
+
+```json
+{"type":"circuit:list","flyId":0,"requestId":"groups-1"}
+```
+
+The reply is `circuit:list:result` and contains each group's `key`, display `label`, neuron `count`, left/right counts, and description. The current groups are:
+
+- `smell` — Smell
+- `taste` — Taste
+- `vision` — Photoreceptors
+- `loom` — Looming detectors
+- `escape` — Giant fibre
+- `walk` — Walk forward
+- `back` — Walk backward
+- `steer` — Steering
+- `groom` — Grooming
+- `court` — Courtship circuit
+- `octopamine` — Octopamine (hunger)
+- `feed` — Feeding motor
+
+Read one selected group using its key (or its display label):
+
+```json
+{"type":"circuit:read","flyId":0,"group":"smell","requestId":"group-read-1"}
+```
+
+The `circuit:read:result` reply includes the group's left/right firing rates in Hz, neuron counts, description, and a `neurons` array containing each member's numeric ID, neuron type, side, current activity, and cumulative spike count. Omit `flyId` to use the currently selected fly. An unknown group or unavailable fly returns an error.
+
+### 9. Set the scaffold
 
 ```json
 {"type":"scaffold:set","scaffold":"walking","requestId":"scaffold-1"}
@@ -384,7 +415,7 @@ Return the latest available values for each matched neuron. Unknown IDs/names ar
 
 `scaffold` may be a registered scaffold name or a JSON object describing a scaffold configuration. The simulation should validate it, apply it, and return an error if the requested scaffold is unsupported.
 
-### 9–10. Visual stream
+### 10–11. Visual stream
 
 Send frames using the existing `vision:frame` message shape:
 
