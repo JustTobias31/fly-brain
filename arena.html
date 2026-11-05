@@ -27,7 +27,7 @@
   </header>
   <section>
     <div class="row">
-      <button id="play" class="primary">▶ Run</button>
+      <button id="play" class="primary">▶ Run</button><button id="stop" title="Stop simulation">■ Stop</button>
       <button id="addFly">+ Fly</button>
       <button id="addFemale" title="Add a female fly (males court her)">+ ♀</button>
       <label>speed <input id="speed" type="range" min="0.05" max="2" step="0.05" value="2"><span id="speedv">2.00×</span></label>
@@ -63,7 +63,9 @@
     <div id="flies"></div>
   </section>
   <section id="selsec" hidden>
-    <h2>Selected fly</h2>
+    <h2>Selected fly · manual transform</h2>
+    <div class="row transformTools"><button id="moveFly" class="on" type="button">↔ Move</button><button id="rotateFly" type="button">⟳ Rotate</button><label><input id="gizmoEnabled" type="checkbox" checked> Gizmo</label></div>
+    <div class="note">Select a fly, then drag its gizmo. The simulation pauses while you move or rotate it.</div>
     <div id="sel"></div>
   </section>
 </aside>
