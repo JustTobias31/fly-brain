@@ -24,7 +24,7 @@ function togglePopup(id){const el=document.querySelector("#"+id);el.hidden=!el.h
 document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>document.querySelector("#"+b.dataset.close).hidden=true);
 document.querySelector("#resetView")?.addEventListener("click",()=>send("controller:reset-view"));
 document.querySelector("#gizmoMode")?.addEventListener("change",e=>send("controller:gizmo-mode",{mode:e.target.value}));
-document.querySelector("#arenaSize")?.addEventListener("input",e=>{const size=Number(e.target.value),radius=size/2;const out=document.querySelector("#arenaSizeValue");if(out)out.value=size;send("controller:arena-size",{radius});if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"arena:size",radius}))});
+for(const axis of ["X","Y"])document.querySelector("#arenaSize"+axis)?.addEventListener("change",e=>{const input=e.target;input.value=Math.max(.1,Number(input.value)||.1);const x=Number(document.querySelector("#arenaSizeX").value),y=Number(document.querySelector("#arenaSizeY").value);send("controller:arena-size",{sizeX:x,sizeY:y});if(socket?.readyState===WebSocket.OPEN)socket.send(JSON.stringify({type:"arena:size",sizeX:x,sizeY:y,radius:Math.max(x,y)/2}))});
 document.querySelector("#movementEnabled")?.addEventListener("change",e=>send("controller:movement-enabled",{enabled:e.target.checked}));
 document.querySelector("#rotationEnabled")?.addEventListener("change",e=>send("controller:rotation-enabled",{enabled:e.target.checked}));
 document.querySelector("#startTraining")?.addEventListener("change",e=>send("controller:training",{enabled:e.target.checked}));
