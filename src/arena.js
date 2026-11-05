@@ -359,6 +359,8 @@ function onWorker(f, m) {
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
     if (f.id === selected && (f.prev?.takeoffPending !== m.takeoffPending || f.prev?.flying !== m.flying)) renderFlyList();
     broadcastOthers();
+  } else if (m.type === 'circuit:list:result' || m.type === 'circuit:read:result') {
+    if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'api:command-result', requestId: m.requestId, ok: !m.error, result: { type: m.type, ...m }, ...(m.error ? { error: m.error } : {}) }, '*');
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
     f.activityTime = m.t; brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
     if (window.parent !== window) { const active = []; for (let i = 0; i < m.trace.length; i++) if (m.trace[i] > 0.001) active.push({ id: i, activity: m.trace[i] }); active.sort((a, b) => b.activity - a.activity); if (active.length > 1000) active.length = 1000; window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', activity: active }, '*'); if (m.eyes) window.parent.postMessage({ source: 'fly-arena', type: 'vision-eyes', eyes: ['#eyeL', '#eyeR'].map(id => $(id).toDataURL('image/png')) }, '*'); }
@@ -764,6 +766,10 @@ window.addEventListener('message', e => {
       if(target.type==='fly'){const f=findFly(target.id);if(!f){ack(false,{},'Fly not found');}else if(['movementEnabled','rotationEnabled'].includes(cmd.property)&&typeof cmd.value==='boolean'){motionOptions[cmd.property==='movementEnabled'?'movement':'rotation']=cmd.value;for(const x of flies)if(x.ready)x.worker.postMessage({type:'motion',options:motionOptions});ack(true,{id:f.id,property:cmd.property,value:cmd.value});}else ack(false,{},'Unsupported fly property');}
       else if(target.type==='element'){let obj=null;for(const key of ['food','bitterPatches','hazards','obstacles','odors'])obj ||= env[key].find(o=>o._apiId===target.id);const allowed=['x','y','z','r','sx','sy','sz','rotation','strength','heat','sugar','amount','sigma','odor'];if(!obj)ack(false,{},'Element not found');else if(!allowed.includes(cmd.property)||!['number','string'].includes(typeof cmd.value)||(typeof cmd.value==='number'&&!Number.isFinite(cmd.value)))ack(false,{},'Unsupported property or value');else{obj[cmd.property]=cmd.value;rebuildEnv();syncEnv();postElements();ack(true,{id:target.id,property:cmd.property,value:cmd.value});}}
       else ack(false,{},'target.type must be element or fly');
+    } else if(cmd.type==='circuit:list'||cmd.type==='circuit:read'){
+      const f=cmd.flyId==null?flies.find(x=>x.id===selected):findFly(cmd.flyId);
+      if(!f?.ready)ack(false,{},'Fly is not ready');
+      else f.worker.postMessage({type:cmd.type,requestId:cmd.requestId,...(cmd.type==='circuit:read'?{group:cmd.group}:{})});
     } else if(cmd.type==='arena:list'){
       const elements=[];for(const [key,list] of Object.entries(env)){if(!Array.isArray(list))continue;for(const o of list){o._apiId ||= 'element-'+crypto.randomUUID();elements.push({id:o._apiId,type:o.type||key,name:o._apiName||o.odor||key,position:[o.x||0,o.y||0,o.z??(o.sz||0)/2],rotation:Array.isArray(o.rotation)?o.rotation:[0,0,Math.sin((Number(o.rotation)||0)/2),Math.cos((Number(o.rotation)||0)/2)],properties:{...o}});}}
       for(const f of flies){const bi=f.bodyNames?.indexOf('thorax')??-1,p=bi*3,q=bi*4,pos=f.last?.xpos,quat=f.last?.xquat;if(bi>=0&&pos&&quat){elements.push({id:f.id,type:'fly',name:f.apiName||'fly '+(f.id+1),position:Array.from(pos.slice(p,p+3)),rotation:[quat[q+1],quat[q+2],quat[q+3],quat[q]],properties:{sex:f.sex,alive:f.last.alive!==false}});}}
