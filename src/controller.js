@@ -8,9 +8,9 @@ document.querySelector("#pause")?.addEventListener("click",()=>send("controller:
 document.querySelector("#stop")?.addEventListener("click",()=>{send("controller:pause");send("controller:reset-view")});
 document.querySelector("#build")?.addEventListener("click",()=>togglePopup("buildPopup"));
 document.querySelector("#settingsOpen")?.addEventListener("click",()=>togglePopup("settingsPopup"));
-document.querySelector("#showBrain")?.addEventListener("click",()=>()=>setView("brain");
-document.querySelector("#showVision")?.addEventListener("click",()=>()=>setView("vision");
-document.querySelector("#showArena")?.addEventListener("click",()=>()=>setView("arena");
+document.querySelector("#showBrain")?.addEventListener("click",()=>setView("brain"));
+document.querySelector("#showVision")?.addEventListener("click",()=>setView("vision"));
+document.querySelector("#showArena")?.addEventListener("click",()=>setView("arena"));
 document.querySelector("#gizmoVisible")?.addEventListener("change",e=>send("controller:gizmo-visible",{visible:e.target.checked}));
 document.querySelectorAll("[data-tool]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-tool]").forEach(x=>x.classList.toggle("active",x===b));send("controller:tool",{tool:b.dataset.tool});}));
 document.querySelector("#flyInfo")?.addEventListener("click",()=>togglePopup("flyPopup"));
