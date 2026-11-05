@@ -685,6 +685,8 @@ window.addEventListener('message', e => {
     setSimulationState(m.type === 'controller:run' ? 'running' : 'paused');
   } else if (m.type === 'controller:stop') {
     setSimulationState('stopped');
+  } else if (m.type === 'controller:vision-obstacles') {
+    for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'vision:obstacles', enabled: !!m.enabled });
   } else if (m.type === 'controller:movement-enabled') {
     motionOptions.movement = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'motion', options: motionOptions });
   } else if (m.type === 'controller:rotation-enabled') {
