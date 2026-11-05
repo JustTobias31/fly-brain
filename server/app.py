@@ -229,9 +229,10 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
             message = await ws.receive_json()
             kind = message.get("type")
             if session is not None:
-                owner_messages = {"neurons:register", "neurons:activity", "state", "vision:frame", "vision:stop", "vision:eyes", "simulation:status"}
-                if (role == "owner" and kind not in owner_messages and kind != "ping") or (role == "controller" and kind in owner_messages and kind not in {"vision:frame", "vision:stop"}):
-                    await ws.send_json({"type": "error", "error": f"Message type {kind} is not allowed for role {role}"})
+                owner_messages = {"neurons:register", "neurons:activity", "state", "vision:frame", "vision:stop", "vision:eyes", "simulation:status", "ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result"}
+                controller_commands = {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "scaffold:set", "vision:frame", "vision:stop", "neurons:read"}
+                if (role == "owner" and kind not in owner_messages and kind != "ping") or (role == "controller" and kind in owner_messages and kind not in {"vision:frame", "vision:stop"} and kind not in controller_commands):
+                    await ws.send_json({"type": "error", "error": f"Message type {kind} is not allowed for role {role}", "requestId": message.get("requestId")})
                     continue
             if kind == "neurons:register":
                 items = message.get("neurons", [])
@@ -389,6 +390,30 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 if state in {"running", "paused", "stopped"}:
                     session["simulation_status"] = state
                     await route({"type": "simulation:status", "state": state, "timestamp": time.time()}, exclude=ws)
+            elif kind == "neurons:read" and session is not None and role == "controller":
+                ids = message.get("ids")
+                names = message.get("names")
+                if ids is not None and (not isinstance(ids, list) or any(not isinstance(v, int) for v in ids)):
+                    await ws.send_json({"type": "error", "error": "ids must be an array of integer neuron IDs", "requestId": message.get("requestId")})
+                    continue
+                if names is not None and (not isinstance(names, list) or any(not isinstance(v, str) for v in names)):
+                    await ws.send_json({"type": "error", "error": "names must be an array of neuron names", "requestId": message.get("requestId")})
+                    continue
+                selected = list(neurons.values())
+                if ids is not None or names is not None:
+                    wanted_ids = set(ids or [])
+                    wanted_names = {v.casefold() for v in (names or [])}
+                    selected = [n for n in selected if n.get("id") in wanted_ids or str(n.get("name", n.get("type", ""))).casefold() in wanted_names]
+                found_ids = {n.get("id") for n in selected}
+                found_names = {str(n.get("name", n.get("type", ""))).casefold() for n in selected}
+                missing = [v for v in (ids or []) if v not in found_ids] + [v for v in (names or []) if v.casefold() not in found_names]
+                await ws.send_json({"type": "neurons:read:result", "requestId": message.get("requestId"), "neurons": selected, "missing": missing})
+            elif kind in {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "scaffold:set"} and session is not None and role == "controller":
+                delivered = await route(message, exclude=ws)
+                if delivered == 0:
+                    await ws.send_json({"type": "ack", "requestId": message.get("requestId"), "ok": False, "error": "Arena owner is offline"})
+            elif kind in {"ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result"} and session is not None and role == "owner":
+                await route(message, exclude=ws)
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
             else:
