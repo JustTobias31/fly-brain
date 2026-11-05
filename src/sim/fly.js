@@ -140,7 +140,8 @@ export class FlyAgent {
       // or raycasts can reject a correctly resized block before testing its shape.
       M.geom_aabb.set([0, 0, 0, sx, sy, sz / 2], id * 6);
       M.geom_rbound[id] = Math.hypot(sx, sy, sz / 2);
-      M.geom_pos.set([o.x, o.y, sz / 2], id * 3);
+      M.geom_pos.set([o.x, o.y, o.z ?? sz / 2], id * 3);
+      const yaw = Number(o.rotation) || 0; M.geom_quat.set([Math.cos(yaw / 2), 0, 0, Math.sin(yaw / 2)], id * 4);
     }
     this.mj.mj_forward(M, this.mjd);
   }
