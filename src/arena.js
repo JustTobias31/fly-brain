@@ -593,17 +593,17 @@ window.addEventListener('message', e => {
     controllerView = m.view;
     const arena = controllerView === 'arena';
     $('#panel').hidden = false;
-    $('#brainpanel').hidden = true;
+    $('#brainpanel').hidden = false;
     $('#c').style.display = 'block';
     if (!arena) {
       const eyes = $('#bpBody .eyes'), groupsEl = $('#groups'), brain = $('#brain');
-      eyes.hidden = controllerView !== 'vision' || controllerVisionSource === 'external';
+      eyes.hidden = controllerVisionSource === 'external';
       let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external screen share.'; $('#bpBody').append(note); } note.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; let preview = $('#externalVisionPreview'); if (!preview) { preview = document.createElement('div'); preview.id = 'externalVisionPreview'; preview.style.cssText = 'width:100%;max-width:500px;margin:8px auto'; preview.hidden = true; const img = document.createElement('img'); img.alt = 'External vision input'; img.style.cssText = 'display:block;width:100%;max-height:60vh;object-fit:contain;background:#05070c;border-radius:6px'; preview.append(img); $('#bpBody').append(preview); } preview.hidden = controllerView !== 'vision' || controllerVisionSource !== 'external';
       $('#brainpanel').classList.remove('folded');
-      groupsEl.hidden = controllerView !== 'brain';
-      brain.style.display = controllerView === 'brain' ? 'block' : 'none';
+      groupsEl.hidden = false;
+      brain.style.display = 'block';
       $('#bpBody').style.display = 'block';
-      $('#brainpanel').style.display = 'block';
+      $('#brainpanel').style.display = 'flex';
     }
   } else if (m.type === 'controller:reset-view') {
     controls?.reset?.();
