@@ -40,7 +40,8 @@ const FLY_CAP = Math.min(MAX_FLIES, Math.max(1, Math.floor(Number(new URLSearchP
 const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(location.search).get('vision') || '').toLowerCase());
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
-let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
+let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib;
+function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
 
@@ -83,7 +84,7 @@ async function main() {
   buildBrainPanel(data);
   buildScene(data);
   buildUI();
-  if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'ready', arenaRadius: env.arena.radius }, '*');
+  if (window.parent !== window) { window.parent.postMessage({ source: 'fly-arena', type: 'ready', arenaRadius: env.arena.radius }, '*'); window.parent.postMessage({ source: 'fly-arena', type: 'simulation-status', state: running ? 'running' : simulationStopped ? 'stopped' : 'paused' }, '*'); }
   $('#loading').remove();
   const st0 = PRESET.start || [0, 0, 0];
   if (PRESET.flySpots) for (const s of PRESET.flySpots.slice(0, FLY_CAP)) await addFly(s.pos, s.yaw, s.sex);
@@ -123,9 +124,9 @@ function buildScene(data) {
   poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
   transformControls.addEventListener('dragging-changed', e => {
     controls.enabled = !e.value;
-    if (e.value) { gizmoDragging = true; resumeAfterGizmo = running; if (running) { running = false; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'pause' }); }
+    if (e.value) { gizmoDragging = true; resumeAfterGizmo = running; if (running) setSimulationState('paused');
       if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: true, id: gizmoFlyId }, '*');
-    } else { gizmoDragging = false; if (resumeAfterGizmo) { running = true; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'run' }); } resumeAfterGizmo = false;
+    } else { gizmoDragging = false; if (resumeAfterGizmo) setSimulationState('running'); resumeAfterGizmo = false;
       if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: false, id: gizmoFlyId }, '*'); }
   });
   transformControls.addEventListener('objectChange', () => {
@@ -332,7 +333,7 @@ function attachPoseGizmo() {
 }
 // ---------------- UI ----------------
 function buildUI() {
-  if (window.parent === window) $('#play').onclick = () => { running = !running; for (const f of flies) if (f.ready) f.worker.postMessage({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
+  if (window.parent === window) $('#play').onclick = () => { setSimulationState(running ? 'paused' : 'running'); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
   $('#addFly').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2); };
   $('#addFemale').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2, 'f'); };
   $('#speed').oninput = e => { speed = +e.target.value; $('#speedv').textContent = speed.toFixed(2) + '×'; for (const f of flies) f.worker.postMessage({ type: 'speed', speed }); };
@@ -575,11 +576,12 @@ window.addEventListener('message', e => {
   } else if (m.type === 'controller:fly-pose') {
     const f = flies.find(x => x.id === m.id); if (f?.ready) f.worker.postMessage({ type: 'set_pose', position: m.position, quaternion: m.quaternion });
   } else if (m.type === 'controller:pose-drag') {
-    if (m.active && !gizmoDragging) { remotePoseResume = running; if (running) { running = false; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'pause' }); } }
-    else if (!m.active && remotePoseResume) { running = true; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'run' }); remotePoseResume = false; }
+    if (m.active && !gizmoDragging) { remotePoseResume = running; if (running) setSimulationState('paused'); }
+    else if (!m.active && remotePoseResume) { setSimulationState('running'); remotePoseResume = false; }
   } else if (m.type === 'controller:run' || m.type === 'controller:pause') {
-    running = m.type === 'controller:run';
-    for (const f of flies) if (f.ready) f.worker.postMessage({ type: running ? 'run' : 'pause' });
+    setSimulationState(m.type === 'controller:run' ? 'running' : 'paused');
+  } else if (m.type === 'controller:stop') {
+    setSimulationState('stopped');
   } else if (m.type === 'controller:body') {
     controllerBody = !!m.enabled;
     for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; } attachPoseGizmo();
