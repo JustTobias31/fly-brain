@@ -254,6 +254,7 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                             current["spike_count"] = item.get("spike_count")
                             if current["activity"]:
                                 active_neuron_ids.add(item["id"])
+                    updates = [{**neurons.get(item.get("id"), {}), **item} for item in updates if isinstance(item, dict)]
                     timestamp = time.time()
                     latest_state["activity"] = {"active_count": len(active_neuron_ids), "sampled_count": len(updates), "timestamp": timestamp}
                     latest_state["updated_at"] = timestamp
@@ -362,6 +363,8 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 await route({"type": "vision:frame", "width": width, "height": height, "pixels": pixels, "image": image, "timestamp": time.time()})
             elif kind == "vision:stop":
                 await route({"type": "vision:stop", "timestamp": time.time()})
+            elif kind.startswith("controller:") and session is not None and role == "controller":
+                await route(message, exclude=ws)
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
             else:
