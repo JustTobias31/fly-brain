@@ -600,7 +600,7 @@ window.addEventListener('message', e => {
     controllerBody = !!m.enabled;
     for (const f of flies) { if (f.ready) f.worker.postMessage({ type: 'body', enabled: controllerBody }); f.group.visible = controllerBody; for (const g of f.bodyGroups || []) if (g) g.visible = controllerBody; f.ring.visible = controllerBody && f.id === selected; } attachPoseGizmo();
   } else if (m.type === 'controller:vision-source') {
-    controllerVisionSource = m.source === 'external' ? 'external' : 'arena';
+    controllerVisionSource = (m.visionSource || m.source) === 'external' ? 'external' : 'arena';
     if (controllerView === 'vision') { const eyes = $('#bpBody .eyes'); eyes.hidden = controllerVisionSource === 'external'; let note = $('#externalVisionNote'); if (!note) { note = document.createElement('div'); note.id = 'externalVisionNote'; note.className = 'note'; note.textContent = 'Waiting for an external screen share.'; $('#bpBody').append(note); } note.hidden = controllerVisionSource !== 'external' || !!$('#externalVisionPreview img')?.src; const preview = $('#externalVisionPreview'); if (preview) preview.hidden = controllerVisionSource !== 'external'; }
   } else if (m.type === 'controller:view') {
     controllerView = m.view;
