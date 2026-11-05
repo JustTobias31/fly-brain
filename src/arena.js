@@ -179,6 +179,13 @@ function buildScene(data) {
   hlPts = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ size: 7, sizeAttenuation: false, transparent: true, opacity: 1, depthWrite: false, depthTest: false }));
   hlPts.visible = false; brainScene.add(hlPts);
   brainCam.position.set(0, 0, 1050); brainCam.lookAt(0, 0, 0); brainAct = new Float32Array(data.N);
+  const brainCanvas = $('#brain'); brainCanvas.tabIndex = 0; brainCanvas.style.cursor = 'grab';
+  let brainDrag = null;
+  brainCanvas.addEventListener('pointerdown', e => { brainCanvas.focus(); brainDrag = {x:e.clientX,y:e.clientY}; brainCanvas.setPointerCapture(e.pointerId); brainCanvas.style.cursor='grabbing'; e.preventDefault(); });
+  brainCanvas.addEventListener('pointermove', e => { if (!brainDrag) return; const dx=e.clientX-brainDrag.x,dy=e.clientY-brainDrag.y; brainDrag={x:e.clientX,y:e.clientY}; brainPts.rotation.y += dx*0.008; brainPts.rotation.x += dy*0.008; brainPts.rotation.x=Math.max(-Math.PI,Math.min(Math.PI,brainPts.rotation.x)); });
+  const endBrainDrag = () => { brainDrag=null; brainCanvas.style.cursor='grab'; };
+  brainCanvas.addEventListener('pointerup',endBrainDrag); brainCanvas.addEventListener('pointercancel',endBrainDrag);
+  brainCanvas.addEventListener('keydown', e => { const step=e.shiftKey?70:30; const k=e.key.toLowerCase(); if (!['w','a','s','d'].includes(k)) return; e.preventDefault(); if(k==='w')brainCam.position.z-=step; if(k==='s')brainCam.position.z+=step; if(k==='a')brainCam.position.x-=step; if(k==='d')brainCam.position.x+=step; brainCam.lookAt(0,0,0); });
 }
 let pd = null, remotePoseResume = false;
 let controllerView = 'arena', controllerBody = true, controllerVisionSource = 'arena';
@@ -547,7 +554,7 @@ function animate() {
     col.needsUpdate = true; brainDirty = false; brainColorFly = selected; brainColorHover = hover; metrics.brainUploads++;
   }
   if (hover !== hlShown) showGroupInInset(hover);
-  brainPts.rotation.y += elapsed * 0.12; hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
+  hlPts.rotation.copy(brainPts.rotation); brainRenderer.render(brainScene, brainCam); metrics.brainDraws++;
 
 }
 
