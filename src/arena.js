@@ -671,7 +671,7 @@ window.addEventListener('message', e => {
   } else if (m.type === 'controller:tool') {
     tool = ['food','odor','bitter','hazard','obstacle','wedge','ball','co2','none'].includes(m.tool) ? m.tool : 'none';
   } else if (m.type === 'controller:arena-size') {
-    setArenaRadius(m.radius);
+    if(Number.isFinite(Number(m.sizeX)))setArenaSize(m.sizeX,Number.isFinite(Number(m.sizeY))?m.sizeY:env.arena.sizeY||m.sizeX);else setArenaRadius(m.radius);
   } else if (m.type === 'controller:element-delete') {
     deleteElement(m.kind, m.index);
   } else if (m.type === 'controller:fly-pose') {
