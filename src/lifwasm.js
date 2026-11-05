@@ -84,6 +84,7 @@ export class LIFWasm {
     return this.ring.subarray(slot * this.N, slot * this.N + nf);
   }
   get nAwake() { return this.N; }
+  setSynapseWeights(weights) { if (!weights || weights.length !== this.graph.weights.length) throw new Error('Synapse weight count mismatch'); this.graph.weights.set(weights); }
 }
 
 /** Convenience: create a memory + instance + graph + one brain (Node tests, single-fly pages). */
