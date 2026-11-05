@@ -749,7 +749,7 @@ window.addEventListener('message', e => {
         const f=flies.find(x=>String(x.id)===String(cmd.id)||x.apiName===cmd.id);
         let found=null;
         for(const key of ['food','bitterPatches','hazards','obstacles','odors']){const i=env[key].findIndex(o=>o._apiId===cmd.id);if(i>=0){found={key,index:i,obj:env[key][i]};break;}}
-        if(f&&action==='move'&&validVec(cmd.position,3)){f.worker.postMessage({type:'set_pose',position:cmd.position,quaternion:validVec(cmd.rotation,4)?cmd.rotation:[0,0,0,1]});ack(true,{id:f.id});}
+        if(f&&action==='move'&&validVec(cmd.position,3)){const bi=f.bodyNames?.indexOf('thorax')??-1,q=bi*4,old=f.last?.xquat;const current=old&&bi>=0?[old[q+1],old[q+2],old[q+3],old[q]]:[0,0,0,1];f.worker.postMessage({type:'set_pose',position:cmd.position,quaternion:validVec(cmd.rotation,4)?cmd.rotation:current});ack(true,{id:f.id});}
         else if(f&&action==='rotate'&&validVec(cmd.rotation,4)&&f.last?.xpos&&f.bodyNames){const bi=f.bodyNames.indexOf('thorax'),q=bi*4,p=bi*3,pos=Array.from(f.last.xpos.slice(p,p+3));f.worker.postMessage({type:'set_pose',position:pos,quaternion:cmd.rotation});ack(true,{id:f.id});}
         else if(f&&action==='remove')ack(false,{},'Fly removal is not supported by the worker pool');
         else if(!found)ack(false,{},'Element not found');
@@ -766,7 +766,7 @@ window.addEventListener('message', e => {
     } else if(cmd.type==='arena:list'){
       const elements=[];for(const [key,list] of Object.entries(env)){if(!Array.isArray(list))continue;for(const o of list){o._apiId ||= 'element-'+crypto.randomUUID();elements.push({id:o._apiId,type:o.type||key,name:o._apiName||o.odor||key,position:[o.x||0,o.y||0,(o.sz||0)/2],rotation:o.rotation??0,properties:{...o}});}}
       reply('api:command-result',{requestId:cmd.requestId,ok:true,result:{type:'arena:list:result',elements}});
-    } else if(cmd.type==='loom:trigger'){launchThreat();ack(true);}
+    } else if(cmd.type==='loom:trigger'){const f=flies.find(x=>x.id===selected&&x.last);if(!f)ack(false,{},'No ready fly is selected');else{launchThreat();ack(true);}}
     else if(cmd.type==='fly:takeoff'){const targets=cmd.flyId==null?[findFly(selected)].filter(Boolean):[findFly(cmd.flyId)].filter(Boolean);if(!targets.length)ack(false,{},'Fly not found');else{for(const f of targets)f.worker.postMessage({type:'takeoff'});ack(true,{flyIds:targets.map(f=>f.id)});}}
     else if(cmd.type==='fly:transform:get'){
       const f=findFly(cmd.flyId);if(!f?.last?.xpos||!f.bodyNames)reply('api:command-result',{requestId:cmd.requestId,ok:false,error:'Fly not found or transform unavailable'});
