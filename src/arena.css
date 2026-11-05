@@ -48,3 +48,5 @@ a { color: var(--acc); }
 #brain { flex: none; width: 100%; height: min(48vh, 520px); border-top: 1px solid var(--line); background: rgba(5,7,12,.6); }
 #scaffolds { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 10px; font-size: 12px; }
 #scaffolds .scf { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.transformTools{margin:8px 0}.transformTools button.on{background:var(--acc);color:#1a1200;border-color:transparent}.transformTools label{margin-left:auto}
