@@ -719,6 +719,63 @@ window.addEventListener('message', e => {
     }
   } else if (m.type === 'controller:reset-view') {
     controls?.reset?.();
+  } else if (m.type === 'api:command') {
+    const cmd=m.command||{}, reply=(type,data={})=>{if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type,...data},'*');}, ack=(ok,result={},error)=>reply('api:command-result',{requestId:cmd.requestId,ok,result,error});
+    const validVec=(v,n)=>Array.isArray(v)&&v.length===n&&v.every(Number.isFinite);
+    const findFly=id=>flies.find(f=>f.id===Number(id));
+    const kinds={cube:'obstacles',block:'obstacles',sugar:'food',food:'food',odor:'odors',heat:'hazards',hazard:'hazards',bitter:'bitterPatches',aversive:'bitterPatches'};
+    if(cmd.type==='simulation:control'){
+      if(!['play','pause','stop'].includes(cmd.action))ack(false,{},'action must be play, pause, or stop');
+      else{setSimulationState(cmd.action==='play'?'running':cmd.action==='pause'?'paused':'stopped');ack(true,{state:cmd.action==='play'?'running':cmd.action==='pause'?'paused':'stopped'});}
+    } else if(cmd.type==='element:command'){
+      const action=cmd.action,element=String(cmd.element||'').toLowerCase();
+      if(action==='place'&&(element==='fly'||element==='fly female')){
+        const pos=validVec(cmd.position,3)?cmd.position:[0,0,0.13],sex=element==='fly female'?'f':'m';
+        addFly([pos[0],pos[1]],0,sex).then(f=>{if(!f){ack(false,{},'Fly could not be created');return;}const name='fly '+f.id;f.apiName=name;ack(true,{id:f.id},{name});});
+      } else if(action==='place'){
+        const kind=kinds[element],pos=validVec(cmd.position,3)?cmd.position:[0,0,0];
+        if(!kind){ack(false,{},'Unsupported element type');}
+        else{
+          const props=cmd.properties||{},o={x:pos[0],y:pos[1]};
+          if(kind==='obstacles')Object.assign(o,{type:'box',sx:Number(props.sx??props.size?.[0]??0.2),sy:Number(props.sy??props.size?.[1]??0.2),sz:Number(props.sz??props.size?.[2]??0.3),rotation:0});
+          else if(kind==='food')Object.assign(o,{r:Number(props.r??0.25),sugar:Number(props.sugar??1),bitter:Number(props.bitter??0),water:Number(props.water??0.2),amount:Number(props.amount??5)});
+          else if(kind==='odors')Object.assign(o,{odor:String(props.odor??'vinegar'),strength:Number(props.strength??1),sigma:Number(props.sigma??0.9)});
+          else if(kind==='hazards')Object.assign(o,{r:Number(props.r??0.35),heat:Number(props.heat??1)});
+          else Object.assign(o,{r:Number(props.r??0.25),bitter:Number(props.bitter??1)});
+          if(Object.values(o).some(v=>typeof v==='number'&&!Number.isFinite(v))){ack(false,{},'Element properties must be finite numbers');}
+          else{o._apiId='element-'+crypto.randomUUID();o._apiName=String(cmd.name||element);env[kind].push(o);rebuildEnv();syncEnv();postElements();ack(true,{id:o._apiId});}
+        }
+      } else if(['move','rotate','remove'].includes(action)){
+        const f=flies.find(x=>String(x.id)===String(cmd.id)||x.apiName===cmd.id);
+        let found=null;
+        for(const key of ['food','bitterPatches','hazards','obstacles','odors']){const i=env[key].findIndex(o=>o._apiId===cmd.id);if(i>=0){found={key,index:i,obj:env[key][i]};break;}}
+        if(f&&action==='move'&&validVec(cmd.position,3)){f.worker.postMessage({type:'set_pose',position:cmd.position,quaternion:validVec(cmd.rotation,4)?cmd.rotation:[0,0,0,1]});ack(true,{id:f.id});}
+        else if(f&&action==='rotate'&&validVec(cmd.rotation,4)&&f.last?.xpos&&f.bodyNames){const bi=f.bodyNames.indexOf('thorax'),q=bi*4,p=bi*3,pos=Array.from(f.last.xpos.slice(p,p+3));f.worker.postMessage({type:'set_pose',position:pos,quaternion:cmd.rotation});ack(true,{id:f.id});}
+        else if(f&&action==='remove')ack(false,{},'Fly removal is not supported by the worker pool');
+        else if(!found)ack(false,{},'Element not found');
+        else if(action==='remove'){env[found.key].splice(found.index,1);rebuildEnv();syncEnv();postElements();ack(true,{id:cmd.id});}
+        else if(action==='move'&&validVec(cmd.position,3)){found.obj.x=cmd.position[0];found.obj.y=cmd.position[1];rebuildEnv();syncEnv();postElements();ack(true,{id:cmd.id});}
+        else if(action==='rotate'&&validVec(cmd.rotation,4)){found.obj.rotation=cmd.rotation;rebuildEnv();syncEnv();postElements();ack(true,{id:cmd.id});}
+        else ack(false,{},'Invalid transform');
+      } else ack(false,{},'Unsupported element action');
+    } else if(cmd.type==='property:set'){
+      const target=cmd.target||{};
+      if(target.type==='fly'){const f=findFly(target.id);if(!f){ack(false,{},'Fly not found');}else if(['movementEnabled','rotationEnabled'].includes(cmd.property)&&typeof cmd.value==='boolean'){motionOptions[cmd.property==='movementEnabled'?'movement':'rotation']=cmd.value;for(const x of flies)if(x.ready)x.worker.postMessage({type:'motion',options:motionOptions});ack(true,{id:f.id,property:cmd.property,value:cmd.value});}else ack(false,{},'Unsupported fly property');}
+      else if(target.type==='element'){let obj=null;for(const key of ['food','bitterPatches','hazards','obstacles','odors'])obj ||= env[key].find(o=>o._apiId===target.id);const allowed=['x','y','r','sx','sy','sz','strength','heat','sugar','amount','sigma','odor'];if(!obj)ack(false,{},'Element not found');else if(!allowed.includes(cmd.property)||!['number','string'].includes(typeof cmd.value)||(typeof cmd.value==='number'&&!Number.isFinite(cmd.value)))ack(false,{},'Unsupported property or value');else{obj[cmd.property]=cmd.value;rebuildEnv();syncEnv();postElements();ack(true,{id:target.id,property:cmd.property,value:cmd.value});}}
+      else ack(false,{},'target.type must be element or fly');
+    } else if(cmd.type==='arena:list'){
+      const elements=[];for(const [key,list] of Object.entries(env)){if(!Array.isArray(list))continue;for(const o of list)elements.push({id:o._apiId||key+'-'+list.indexOf(o),type:o.type||key,name:o._apiName||o.odor||key,position:[o.x||0,o.y||0,(o.sz||0)/2],rotation:o.rotation||[0,0,0,1],properties:{...o}});}
+      reply('api:command-result',{requestId:cmd.requestId,ok:true,result:{type:'arena:list:result',elements}});
+    } else if(cmd.type==='loom:trigger'){launchThreat();ack(true);}
+    else if(cmd.type==='fly:takeoff'){const targets=cmd.flyId==null?[findFly(selected)].filter(Boolean):[findFly(cmd.flyId)].filter(Boolean);if(!targets.length)ack(false,{},'Fly not found');else{for(const f of targets)f.worker.postMessage({type:'takeoff'});ack(true,{flyIds:targets.map(f=>f.id)});}}
+    else if(cmd.type==='fly:transform:get'){
+      const f=findFly(cmd.flyId);if(!f?.last?.xpos||!f.bodyNames)reply('api:command-result',{requestId:cmd.requestId,ok:false,error:'Fly not found or transform unavailable'});
+      else{const bi=f.bodyNames.indexOf('thorax'),p=bi*3,q=bi*4,pos=Array.from(f.last.xpos.slice(p,p+3)),wq=f.last.xquat,rotation=[wq[q+1],wq[q+2],wq[q+3],wq[q]];reply('api:command-result',{requestId:cmd.requestId,ok:true,result:{type:'fly:transform:result',flyId:f.id,position:pos,rotation}});}
+    } else if(cmd.type==='scaffold:set'){
+      const config=typeof cmd.scaffold==='string'?{[cmd.scaffold]:true}:cmd.scaffold;
+      if(!config||typeof config!=='object'||Array.isArray(config)||Object.keys(config).some(k=>!SCAFFOLD_IDS.includes(k))){ack(false,{},'Unknown scaffold configuration');}
+      else{for(const f of flies)if(f.ready)f.worker.postMessage({type:'scaffolds',scaffolds:config});ack(true,{scaffolds:config});}
+    } else ack(false,{},'Unsupported command');
   } else if (m.type === 'api:vision-frame') {
     const frame = m.frame;
     if (frame && typeof frame.pixels === 'string') {
