@@ -285,7 +285,7 @@ function onWorker(f, m) {
     broadcastOthers();
   } else if (m.type === 'activity' && f.id === selected && (f.activityTime !== m.t || histFly !== f.id)) {
     f.activityTime = m.t; brainAct.set(m.trace); brainDirty = true; onActivity(f, m);
-    if (window.parent !== window) { const active = []; for (let i = 0; i < m.trace.length; i++) if (m.trace[i] > 0.001) active.push({ id: i, activity: m.trace[i] }); active.sort((a, b) => b.activity - a.activity); if (active.length > 1000) active.length = 1000; window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', activity: active }, '*'); }
+    if (window.parent !== window) { const active = []; for (let i = 0; i < m.trace.length; i++) if (m.trace[i] > 0.001) active.push({ id: i, activity: m.trace[i] }); active.sort((a, b) => b.activity - a.activity); if (active.length > 1000) active.length = 1000; window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', activity: active }, '*'); if (m.eyes) window.parent.postMessage({ source: 'fly-arena', type: 'vision-eyes', eyes: ['#eyeL', '#eyeR'].map(id => $(id).toDataURL('image/png')) }, '*'); }
   }
 }
 let foodDirty = false, lastOthers = 0;
