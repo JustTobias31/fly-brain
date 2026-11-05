@@ -37,7 +37,7 @@ struct Deltas { n: u32, pad0: u32, pad1: u32, pad2: u32, items: array<Delta> };
 const GS: f32 = 1024.0;
 
 @group(0) @binding(0) var<storage, read_write> hdr: Hdr;
-@group(0) @binding(1) var<storage, read> graph: array<u32>;             // indptr | indices | weights(bitcast) | sign(bitcast)
+@group(0) @binding(1) var<storage, read_write> graph: array<u32>;             // indptr | indices | weights(bitcast) | sign(bitcast)
 @group(0) @binding(2) var<storage, read_write> st: array<f32>;          // v | refr | trace | adapt | res | bias | thr | drive
 @group(0) @binding(3) var<storage, read_write> at: array<atomic<i32>>;  // gE | gI | spikeC | ring | ringCount | driven
 @group(0) @binding(4) var<storage, read_write> deltas: Deltas;
@@ -185,7 +185,7 @@ export class LIFGpu {
   static async create({ N, E, graph, params = {}, seed = 1, device = null, graphKey = null }) {
     if (!device) device = await gpuDevice();
     const b = new LIFGpu();
-    b.device = device; b.N = N; b.E = E; b.p = { ...DEFAULTS, ...params };
+    b.device = device; b.N = N; b.E = E; b.p = { ...DEFAULTS, ...params }; b.weights = graph.weights;
     const p = b.p; b.nslots = Math.max(1, Math.round(p.delay / p.dt)) + 1;
     const S = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
     // graph pack: indptr | indices | weights | sign as u32 words
@@ -228,7 +228,7 @@ export class LIFGpu {
     b._rbBusy = [false, false, false, false]; b._rbK = 0;
     b._enc = null; b._cp = null; b._stepsInPass = 0; b._lastSubmit = 0;
     const mod = device.createShaderModule({ code: WGSL });
-    const types = ['storage', 'read-only-storage', 'storage', 'storage', 'storage'];
+    const types = ['storage', 'storage', 'storage', 'storage', 'storage'];
     const bgl = device.createBindGroupLayout({ entries: types.map((t, i) => ({ binding: i, visibility: GPUShaderStage.COMPUTE, buffer: { type: t } })) });
     const pll = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
     b._pipes = {};
@@ -338,6 +338,7 @@ export class LIFGpu {
   }
 
   get nAwake() { return this.N; }
+  setSynapseWeights(weights) { if (!weights || weights.length !== this.E) throw new Error('Synapse weight count mismatch'); this._submit(); this.weights.set(weights); this.device.queue.writeBuffer(this.buf.graph, this._offs.wOff * 4, this.weights); }
   setDriveOne(i, rate) { if (this.drive[i] !== rate) { this.drive[i] = rate; this._pushDelta(i, DELTA_DRIVE, rate); } if (rate > 0) { if (!this.drivenSet.has(i)) { this.drivenSet.add(i); this._drivenDirty = true; } } else if (this.drivenSet.delete(i)) this._drivenDirty = true; }
   setDrive(ix, rate) { for (const i of ix) this.setDriveOne(i, rate); }
   setBias(ix, mv) { for (const i of ix) { this.bias[i] = mv; this._pushDelta(i, DELTA_BIAS, mv); } }
