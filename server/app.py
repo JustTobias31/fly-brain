@@ -164,14 +164,18 @@ async def websocket_endpoint(ws: WebSocket):
                             current["spike_count"] = item.get("spike_count")
                             if current["activity"]:
                                 active_neuron_ids.add(item["id"])
-                    latest_state["activity"] = {"active_count": len(active_neuron_ids), "sampled_count": len(updates), "timestamp": time.time()}
-                    latest_state["updated_at"] = time.time()
+                    timestamp = time.time()
+                    latest_state["activity"] = {"active_count": len(active_neuron_ids), "sampled_count": len(updates), "timestamp": timestamp}
+                    latest_state["updated_at"] = timestamp
+                    await broadcast({"type": "neurons:activity", "neurons": updates, "activity": latest_state["activity"], "timestamp": timestamp}, exclude=ws)
             elif kind == "state":
+                timestamp = time.time()
                 latest_state.update({
                     "body": message.get("body"),
                     "activity": message.get("activity", latest_state["activity"]),
-                    "updated_at": time.time(),
+                    "updated_at": timestamp,
                 })
+                await broadcast({"type": "state", "body": latest_state["body"], "activity": latest_state["activity"], "updated_at": timestamp}, exclude=ws)
             elif kind in ("reward", "punish"):
                 await broadcast({
                     "type": kind,
