@@ -23,8 +23,9 @@ onmessage = async (e) => {
     const flyvis = eyes ? { eyes, map: m.flyvisMap, gain: 150, vRest: gpuEyes?.vRest } : null;
     fly = new FlyAgent({ brain, flyvis, mj, flyXML: m.flyXML, env, data, size: g.size, sign: g.sign, bodymap: m.bodymap, gait: m.gait, id: m.id,
       pos: m.pos, yaw: m.yaw, nProxies: m.nProxies, mode: m.mode, brainOpts: m.brainOpts, vision: m.vision, neuromod: { calib: m.neuromod }, sex: m.sex });
-    bodyEnabled = m.bodyEnabled !== false;
-    fly.bodyEnabled = bodyEnabled;
+    bodyEnabled = true;
+    fly.bodyEnabled = true;
+    fly.captureMotionAnchor();
     meter = new GroupMeter(buildGroups(m.bodymap, data.meta.types, data.side), g.N);
     proxyIds = Array.from({ length:m.nProxies }, (_,k) => fly.model.body_mocapid[fly.model.body(`proxy${k}`).id]);
     postMessage({ type: 'ready', id: m.id, nbody: fly.model.nbody, bodyNames: [...Array(fly.model.nbody).keys()].map(i => fly.model.body(i).name), wingPoses: fly.flight.wingPoses(mj) });
@@ -35,13 +36,14 @@ onmessage = async (e) => {
   else if (m.type === 'speed') speed = m.speed;
   else if (m.type === 'set_pose' && fly) { if (fly.setPose(m.position, m.quaternion)) postPose(); }
   else if (m.type === 'arena:size' && fly) { if (fly.setArenaRadius(m.radius)) postPose(); }
-  else if (m.type === 'body') { bodyEnabled = !!m.enabled; if (fly) { fly.bodyEnabled = bodyEnabled; if (!bodyEnabled) { fly.flight.active = false; fly.cmd = { v: 0, turn: 0 }; } } }
+  else if (m.type === 'motion' && fly) fly.setMotionOptions(m.options);
+  else if (m.type === 'training' && fly) fly.setTraining(m.enabled);
+  else if ((m.type === 'reward' || m.type === 'punish') && fly) { const changed = fly.applyReward((m.type === 'punish' ? -1 : 1) * Math.max(0, Math.min(5, Number(m.intensity) || 1))); postMessage({ type: 'training-result', changed, signal: m.type }); }
   else if (m.type === 'sensory_input') { if (fly) fly.externalSensoryInput = m; }
   else if (m.type === 'external_vision_frame' && fly?.fv && typeof m.pixels === 'string') {
     try { const raw = atob(m.pixels), pixels = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) pixels[i] = raw.charCodeAt(i); fly.fv.setExternalFrame({ width: m.width, height: m.height, pixels }); } catch {}
   }
   else if (m.type === 'external_vision_stop') { fly?.fv?.clearExternalFrame(); }
-  else if (m.type === 'reward' || m.type === 'punish') { if (fly) fly.lastExternalSignal = { type: m.type, intensity: m.intensity, duration_ms: m.duration_ms, received_at: performance.now() }; }
   else if (m.type === 'env') { Object.assign(env, m.env); fly.env = env; if (fly.foodEaten.length !== env.food.length) fly.foodEaten = env.food.map(() => 0); fly.syncObstacles(); }
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
   else if (m.type === 'mode') fly.motor.mode = m.mode;
@@ -49,6 +51,16 @@ onmessage = async (e) => {
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
   else if (m.type === 'neuron:fire' && fly && Number.isInteger(m.id) && m.id >= 0 && m.id < fly.brain.N) { const rate = Math.max(0, Math.min(1000, Number(m.rate) || 0)); fly.brain.setDrive([m.id], rate); setTimeout(() => fly?.brain.setDrive([m.id], 0), Math.max(1, Math.min(60000, m.duration_ms || 20))); }
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
+  else if (m.type === 'brain:export' && fly) { const weights = fly.synapseWeights.slice(); postMessage({ type: 'brain:export', N: fly.data.N, E: weights.length, weights: weights.buffer }, [weights.buffer]); }
+  else if (m.type === 'brain:import' && fly) {
+    try {
+      if (m.N !== fly.data.N || m.E !== fly.synapseWeights.length || !(m.weights instanceof ArrayBuffer) || m.weights.byteLength !== m.E * 4) throw new Error('Brain dimensions do not match this connectome');
+      const incoming = new Float32Array(m.weights), baseline = fly.initialSynapseWeights;
+      for (let i = 0; i < incoming.length; i++) { if (!Number.isFinite(incoming[i]) || incoming[i] < 0 || ((baseline[i] === 0) !== (incoming[i] === 0))) throw new Error('Brain file changes the synapse topology or contains invalid weights'); }
+      fly.synapseWeights.set(incoming); fly.brain.setSynapseWeights?.(fly.synapseWeights);
+      postMessage({ type: 'brain:imported', ok: true });
+    } catch (error) { postMessage({ type: 'brain:imported', ok: false, error: error.message }); }
+  }
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     postMessage({ type: 'activity', id: fly.id, trace: fly.brain.trace.slice(0), t: fly.t, groups: meter.read(fly.brain.spikeCount, fly.t), eyes });
