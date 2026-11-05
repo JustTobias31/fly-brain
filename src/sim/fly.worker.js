@@ -49,6 +49,7 @@ onmessage = async (e) => {
   else if (m.type === 'others') { others = m.others; fly.others = others; setProxies(); }
   else if (m.type === 'mode') fly.motor.mode = m.mode;
   else if (m.type === 'scaffolds') fly.setScaffolds(m.scaffolds);
+  else if (m.type === 'scaffolds' && fly) { try { fly.setScaffolds(m.scaffolds); postMessage({ type: 'scaffolds:result', ok: true }); } catch (error) { postMessage({ type: 'scaffolds:result', ok: false, error: error.message }); } }
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
   else if (m.type === 'neuron:fire' && fly && Number.isInteger(m.id) && m.id >= 0 && m.id < fly.brain.N) { const rate = Math.max(0, Math.min(1000, Number(m.rate) || 0)); fly.brain.setDrive([m.id], rate); setTimeout(() => fly?.brain.setDrive([m.id], 0), Math.max(1, Math.min(60000, m.duration_ms || 20))); }
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
