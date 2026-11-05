@@ -38,7 +38,7 @@ sessions: dict[str, dict[str, Any]] = {}
 @app.post("/sessions")
 async def create_session():
     session_id = uuid.uuid4().hex[:16]
-    sessions[session_id] = {"owner": None, "controllers": set(), "neurons": {}, "active_neuron_ids": set(), "state": {"updated_at": None, "body": None, "activity": None}, "created_at": time.time()}
+    sessions[session_id] = {"owner": None, "controllers": set(), "neurons": {}, "active_neuron_ids": set(), "state": {"updated_at": None, "body": None, "activity": None}, "simulation_status": "stopped", "created_at": time.time()}
     return {"session_id": session_id, "websocket_path": f"/ws/{session_id}", "controller_url": f"/ws/{session_id}"}
 
 
@@ -220,7 +220,7 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
         return delivered
     vision_last_frame = 0.0
     try:
-        await ws.send_json({"type": "connected", "session_id": session_id, "role": role, "registered_neurons": len(neurons), "state": latest_state})
+        await ws.send_json({"type": "connected", "session_id": session_id, "role": role, "registered_neurons": len(neurons), "state": latest_state, "simulation_status": session.get("simulation_status", "stopped") if session else None})
         while True:
             message = await ws.receive_json()
             kind = message.get("type")
@@ -372,6 +372,7 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
             elif kind == "simulation:status" and session is not None and role == "owner":
                 state = message.get("state")
                 if state in {"running", "paused", "stopped"}:
+                    session["simulation_status"] = state
                     await route({"type": "simulation:status", "state": state, "timestamp": time.time()}, exclude=ws)
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
