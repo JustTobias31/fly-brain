@@ -40,7 +40,7 @@ const FLY_CAP = Math.min(MAX_FLIES, Math.max(1, Math.floor(Number(new URLSearchP
 const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(location.search).get('vision') || '').toLowerCase());
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
-let editorActive=false, editorMode='select', editorSelected=null;
+let editorActive=false, editorMode='select', editorSelected=null, editorGizmo=new THREE.Object3D();
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, trainingEnabled = false;
 function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';const play=$('#play');if(play)play.textContent=running?'❚❚ Pause':'▶ Run';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
@@ -172,7 +172,7 @@ function buildScene(data) {
   renderer.domElement.tabIndex = 0; renderer.domElement.addEventListener('pointerdown', () => { renderer.domElement.focus({ preventScroll: true }); setCameraMode('arena'); }); setupFreeLook(renderer.domElement,camera,false);
   controls.minDistance = 0.16; controls.maxDistance = env.arena.radius * 5; camera.far = Math.max(100, env.arena.radius * 8); camera.updateProjectionMatrix();
   transformControls = new TransformControls(camera, renderer.domElement); transformControls.setMode('translate'); transformControls.size = 0.75;
-  poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; scene.add(poseGizmo); scene.add(transformControls.getHelper());
+  poseGizmo = new THREE.Object3D(); poseGizmo.visible = false; editorGizmo.visible=false; scene.add(poseGizmo,editorGizmo); scene.add(transformControls.getHelper());
   transformControls.addEventListener('dragging-changed', e => {
     controls.enabled = false;
     if (e.value) { gizmoDragging = true; resumeAfterGizmo = running; if (running) setSimulationState('paused');
@@ -181,7 +181,7 @@ function buildScene(data) {
       if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose-drag', active: false, id: gizmoFlyId }, '*'); }
   });
   transformControls.addEventListener('objectChange', () => {
-    const f = flies.find(x => x.id === gizmoFlyId); if (!f?.ready) return;
+    if(editorActive&&editorSelected){const obj=env[editorSelected.kind]?.[editorSelected.index];if(!obj)return;obj.x=editorGizmo.position.x;obj.y=editorGizmo.position.y;if(obj.type==='box'){obj.sx=Math.max(.05,editorGizmo.scale.x*.2);obj.sy=Math.max(.05,editorGizmo.scale.y*.2);obj.sz=Math.max(.05,editorGizmo.scale.z*.3);}else if('r'in obj)obj.r=Math.max(.05,obj.r*editorGizmo.scale.x);obj.rotation=editorGizmo.rotation.z;rebuildEnv();syncEnv();return;}const f = flies.find(x => x.id === gizmoFlyId); if (!f?.ready) return;
     const position = poseGizmo.position.toArray(), quaternion = [poseGizmo.quaternion.x, poseGizmo.quaternion.y, poseGizmo.quaternion.z, poseGizmo.quaternion.w];
     f.worker.postMessage({ type: 'set_pose', position, quaternion });
     if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'fly-pose', id: f.id, position, quaternion }, '*');
@@ -289,14 +289,14 @@ function rebuildEnv() {
     }
   }
   for (const [index,o] of env.obstacles.entries()) { let geo; if(o.type==='ball')geo=new THREE.SphereGeometry(o.r||0.25,24,16);else if(o.type==='wedge')geo=new THREE.ConeGeometry(o.r||0.3,o.sz||0.4,3);else if(o.type==='box')geo=new THREE.BoxGeometry((o.sx||0.2)*2,(o.sy||0.2)*2,o.sz||0.3);else geo=new THREE.CylinderGeometry(o.r||0.25,o.r||0.25,o.sz||0.3,32); const mat=new THREE.MeshStandardMaterial({color:editorSelected?.kind==='obstacles'&&editorSelected.index===index?'#ffb347':'#3d4a3d',roughness:0.7}); const m=new THREE.Mesh(geo,mat); if(o.type==='cylinder')m.rotation.x=Math.PI/2; m.position.set(o.x,o.y,o.type==='ball'?(o.r||0.25):(o.sz||0.3)/2);m.castShadow=m.receiveShadow=true;m.userData.editorObject={kind:'obstacles',index};envGroup.add(m); }
-  for (const f of env.food) { const m = discMesh(f.r, '#f2c14e', 0.35 + 0.65 * Math.min(1, f.amount / 5)); m.position.set(f.x, f.y, 0.002); m.userData.food = f; envGroup.add(m); }
-  for (const b of env.bitterPatches) { const m = discMesh(b.r, '#4f8fd6', 0.9); m.position.set(b.x, b.y, 0.002); envGroup.add(m); }
-  for (const h of env.hazards) { const m = discMesh(h.r, '#d9502f', 0.9); m.position.set(h.x, h.y, 0.002); envGroup.add(m); const glow = discMesh(h.r + 0.4, '#d9502f', 0.12, 0.001); glow.position.set(h.x, h.y, 0.001); envGroup.add(glow); }
+  for (const [index,f] of env.food.entries()) { const m=discMesh(f.r,editorSelected?.kind==='food'&&editorSelected.index===index?'#ffb347':'#f2c14e',0.35+0.65*Math.min(1,f.amount/5));m.position.set(f.x,f.y,.002);m.userData.editorObject={kind:'food',index};envGroup.add(m); }
+  for (const [index,b] of env.bitterPatches.entries()) {const m=discMesh(b.r,editorSelected?.kind==='bitterPatches'&&editorSelected.index===index?'#ffb347':'#4f8fd6',.9);m.position.set(b.x,b.y,.002);m.userData.editorObject={kind:'bitterPatches',index};envGroup.add(m);}
+  for (const [index,h] of env.hazards.entries()) {const m=discMesh(h.r,editorSelected?.kind==='hazards'&&editorSelected.index===index?'#ffb347':'#d9502f',.9);m.position.set(h.x,h.y,.002);m.userData.editorObject={kind:'hazards',index};envGroup.add(m);const glow=discMesh(h.r+.4,'#d9502f',.12,.001);glow.position.set(h.x,h.y,.001);envGroup.add(glow);}
   for (const o of env.odors) { // plume as a soft radial gradient
     const g = document.createElement('canvas'); g.width = g.height = 128; const gx = g.getContext('2d'); const grd = gx.createRadialGradient(64, 64, 0, 64, 64, 64);
     const col = o.odor === 'co2' ? '120,200,255' : '190,255,120'; grd.addColorStop(0, `rgba(${col},0.45)`); grd.addColorStop(1, `rgba(${col},0)`); gx.fillStyle = grd; gx.fillRect(0, 0, 128, 128);
     const m = new THREE.Mesh(new THREE.CircleGeometry(o.sigma * 2.2, 48), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(g), transparent: true, depthWrite: false }));
-    m.position.set(o.x, o.y, 0.004); envGroup.add(m); }
+    m.position.set(o.x,o.y,.004);m.userData.editorObject={kind:'odors',index:env.odors.indexOf(o)};envGroup.add(m); }
   postElements();
 }
 function buildFlyMesh(color, sex) {
@@ -387,6 +387,8 @@ function postElements() {
   if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'elements', elements }, '*');
   if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'editor-elements',elements},'*');
 }
+function selectEditorObject(kind,index){editorSelected=kind?{kind,index}:null;transformControls.detach();if(!editorSelected){editorGizmo.visible=false;postEditorSelection();rebuildEnv();return;}const obj=env[kind]?.[index];if(!obj)return;editorGizmo.position.set(obj.x||0,obj.y||0,obj.type==='box'?(obj.sz||.3)/2:(obj.r||.1));editorGizmo.rotation.set(0,0,obj.rotation||0);editorGizmo.scale.set(1,1,1);editorGizmo.visible=true;transformControls.attach(editorGizmo);transformControls.setMode(['translate','rotate','scale'].includes(editorMode)?editorMode:'translate');postEditorSelection();rebuildEnv();}
+function postEditorSelection(){if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'editor-selection',selection:editorSelected,properties:editorSelected?env[editorSelected.kind]?.[editorSelected.index]||null:null},'*');}
 function deleteElement(kind, index) {
   const list = env[kind]; if (!Array.isArray(list) || !Number.isInteger(index) || !list[index]) return;
   list.splice(index, 1); rebuildEnv(); syncEnv(); postElements();
@@ -455,6 +457,7 @@ function buildScaffoldUI() {
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
+  if(editorActive&&editorMode==='select'){const hits=raycaster.intersectObjects(envGroup.children.filter(o=>o.userData.editorObject),false);if(hits.length){const ref=hits[0].object.userData.editorObject;selectEditorObject(ref.kind,ref.index);return;}selectEditorObject(null,-1);return;}
   for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); attachPoseGizmo(); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
@@ -464,8 +467,10 @@ function onClick(e) {
   if (tool === 'co2') env.odors.push({ x: p.x, y: p.y, odor: 'co2', strength: 1, sigma: 0.8 });
   if (tool === 'bitter') env.bitterPatches.push({ x: p.x, y: p.y, r: 0.25, bitter: 1 });
   if (tool === 'hazard') env.hazards.push({ x: p.x, y: p.y, r: 0.3, heat: 1 });
-  if (tool === 'obstacle') { if (window.parent === window) alert('Obstacles change the physics world; they apply to flies added after this point.'); env.obstacles.push({ type: 'box', x: p.x, y: p.y, sx: 0.2, sy: 0.2, sz: 0.3 }); }
-  rebuildEnv(); syncEnv();
+  if (tool === 'obstacle') env.obstacles.push({type:'box',x:p.x,y:p.y,sx:.2,sy:.2,sz:.3});
+  if (tool === 'wedge') env.obstacles.push({type:'wedge',x:p.x,y:p.y,r:.3,sz:.4});
+  if (tool === 'ball') env.obstacles.push({type:'ball',x:p.x,y:p.y,r:.25,sz:.5});
+  rebuildEnv(); syncEnv(); postElements();
 }
 function renderFlyList() {
   $('#nfly').textContent = flies.length;
@@ -654,7 +659,9 @@ window.addEventListener('message', e => {
   if (e.source !== window.parent || e.data?.source !== 'fly-controller') return;
   const m = e.data;
   if (m.type === 'controller:editor') { editorActive=!!m.enabled; document.body.classList.toggle('editor-mode',editorActive); if(editorActive){setSimulationState('paused');tool='none';}else{tool='none';transformControls.detach();} }
-  else if (m.type === 'controller:editor-mode') { editorMode=m.mode||'select'; if(editorMode==='remove')tool='remove'; else if(['translate','rotate','scale'].includes(editorMode)){tool='none';transformControls.setMode(editorMode==='scale'?'scale':editorMode);} else tool='none'; }
+  else if (m.type === 'controller:editor-mode') {editorMode=m.mode||'select';tool='none';if(editorMode==='remove')tool='remove';else if(['translate','rotate','scale'].includes(editorMode)){transformControls.setMode(editorMode);if(editorSelected)transformControls.attach(editorGizmo);}else transformControls.detach();}
+  else if(m.type==='controller:editor-select')selectEditorObject(m.kind,m.index);
+  else if(m.type==='controller:editor-property'&&editorSelected){const obj=env[editorSelected.kind]?.[editorSelected.index];if(obj&&['r','sx','sy','sz','strength','heat','sugar','amount','sigma'].includes(m.key)&&Number.isFinite(Number(m.value))){obj[m.key]=Number(m.value);rebuildEnv();syncEnv();postElements();postEditorSelection();}}
   else if (m.type === 'controller:arena-export') { const blob=new Blob([JSON.stringify(env,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='fly-arena.json';a.click();URL.revokeObjectURL(url); }
   else if (m.type === 'controller:arena-import' && m.env && typeof m.env==='object') { for(const key of ['food','bitterPatches','hazards','obstacles','odors'])if(Array.isArray(m.env[key]))env[key]=m.env[key]; if(m.env.arena)env.arena={...env.arena,...m.env.arena}; rebuildEnv();syncEnv();postElements(); }
   else if (m.type === 'controller:gizmo-mode') {
