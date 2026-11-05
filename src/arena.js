@@ -557,6 +557,10 @@ window.addEventListener('message', e => {
   const m = e.data;
   if (m.type === 'controller:gizmo-mode') {
     transformControls.setMode(m.mode === 'rotate' ? 'rotate' : 'translate');
+  } else if (m.type === 'controller:gizmo-visible') {
+    transformControls.visible = !!m.visible; transformControls.enabled = !!m.visible; poseGizmo.visible = !!m.visible && !!flies.find(x => x.id === selected)?.last;
+  } else if (m.type === 'controller:tool') {
+    tool = ['food','odor','bitter','hazard','obstacle','co2','none'].includes(m.tool) ? m.tool : 'none';
   } else if (m.type === 'controller:arena-size') {
     setArenaRadius(m.radius);
   } else if (m.type === 'controller:element-delete') {
