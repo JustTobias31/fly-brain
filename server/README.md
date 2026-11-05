@@ -223,9 +223,9 @@ Invalid or unknown message types produce:
 Neuron registration receives `neurons:registered`; malformed messages may receive `error`. State/activity updates are stored by the server and available through `GET /state`.
 
 
-## Planned controller → simulation commands
+## Controller → simulation commands
 
-> **Specification only — these commands are not implemented yet.** This section describes the intended controller protocol so a client can be built against it later. The existing WebSocket handler currently supports the message types documented above; do not assume these new commands work until the simulation adapter and server routing are implemented.
+These commands are implemented for session WebSockets: a controller sends them to the session, the server routes them to the connected arena owner, and the owner returns acknowledgements/results through the same session. The arena must be loaded and connected as the session owner. Unsupported properties, missing targets, and invalid values return an error acknowledgement.
 
 All commands are JSON objects with a `type` string. Include a unique `requestId` when you want to match a reply to a request. The examples below show the proposed message shape.
 
@@ -255,7 +255,7 @@ Use `element:command` for arena objects and flies:
 
 - `action`: `place`, `move`, `rotate`, or `remove`.
 - `element`: element type/name to create, such as `cube`, `sugar`, `odor`, `fly`, or `fly female`. Required for `place`.
-- `id`: ID of an existing element for `move`, `rotate`, and `remove`.
+- `id`: ID returned by `place` or `arena:list` for `move`, `rotate`, and `remove`. Fly IDs are numeric.
 - `position`: world-space `[x,y,z]`.
 - `rotation`: quaternion `[x,y,z,w]`.
 - `properties`: optional initial properties for a newly placed element.
@@ -374,7 +374,7 @@ Omit both `ids` and `names` to request the available neuron readout. Expected re
 }
 ```
 
-Return the latest available values for each matched neuron. Unknown IDs/names should be reported clearly (for example in a `missing` array) rather than causing the entire request to fail.
+Return the latest available values for each matched neuron. Unknown IDs/names are reported in `missing`. Results are paged in batches of up to 500; use `offset` and `limit` to retrieve later batches. The reply includes `total`, `offset`, and `nextOffset`.
 
 ### 8. Set the scaffold
 
