@@ -458,19 +458,18 @@ function buildScaffoldUI() {
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
-  if(editorActive&&editorMode==='select'){const hits=raycaster.intersectObjects(envGroup.children.filter(o=>o.userData.editorObject),false);if(hits.length){const ref=hits[0].object.userData.editorObject;selectEditorObject(ref.kind,ref.index);return;}selectEditorObject(null,-1);return;}if(editorActive&&editorMode==='place'&&tool!=='none'){/* continue to floor placement below */}else if(editorActive){return;}
+  if(editorActive&&(editorMode==='select'||editorMode==='remove')){const targets=envGroup.children.filter(o=>o.userData.editorObject);const hits=raycaster.intersectObjects(targets,true);if(hits.length){const ref=hits[0].object.userData.editorObject||hits[0].object.parent?.userData.editorObject;if(ref){if(editorMode==='remove')deleteElement(ref.kind,ref.index);else selectEditorObject(ref.kind,ref.index);return;}}selectEditorObject(null,-1);return;}if(editorActive&&editorMode==='place'&&tool!=='none'){/* continue to floor placement below */}else if(editorActive){return;}
   for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); attachPoseGizmo(); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
-  if (tool === 'remove') { const candidates = [...env.food.map((o,i)=>({kind:'food',o,i})), ...env.bitterPatches.map((o,i)=>({kind:'bitter',o,i})), ...env.obstacles.map((o,i)=>({kind:'obstacle',o,i}))]; let best=null, dist=Infinity; for (const c of candidates) { const d=Math.hypot(c.o.x-p.x,c.o.y-p.y); if(d<dist){dist=d;best=c;} } if(best&&dist<0.5){ const key=best.kind==='food'?'food':best.kind==='bitter'?'bitterPatches':'obstacles'; env[key].splice(best.i,1); } }
+  
   if (tool === 'food') { env.food.push({ x: p.x, y: p.y, r: 0.25, sugar: 1, bitter: 0, water: 0.2, amount: 5 }); env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 0.8, sigma: 0.7 }); }
   if (tool === 'odor') env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 1, sigma: 0.9 });
   if (tool === 'co2') env.odors.push({ x: p.x, y: p.y, odor: 'co2', strength: 1, sigma: 0.8 });
   if (tool === 'bitter') env.bitterPatches.push({ x: p.x, y: p.y, r: 0.25, bitter: 1 });
   if (tool === 'hazard') env.hazards.push({ x: p.x, y: p.y, r: 0.3, heat: 1 });
   if (tool === 'obstacle') env.obstacles.push({type:'box',x:p.x,y:p.y,sx:.2,sy:.2,sz:.3});
-  if (tool === 'wedge') env.obstacles.push({type:'wedge',x:p.x,y:p.y,r:.3,sz:.4});
-  if (tool === 'ball') env.obstacles.push({type:'ball',x:p.x,y:p.y,r:.25,sz:.5});
+
   rebuildEnv(); syncEnv(); postElements();
 }
 function renderFlyList() {
