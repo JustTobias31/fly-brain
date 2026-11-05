@@ -117,7 +117,7 @@ function setupFreeLook(canvas, cam, brain = false) {
     const cp=Math.cos(state.pitch), d=brain ? new THREE.Vector3(Math.sin(state.yaw)*cp,Math.sin(state.pitch),-Math.cos(state.yaw)*cp) : new THREE.Vector3(Math.cos(state.pitch)*Math.cos(state.yaw),Math.cos(state.pitch)*Math.sin(state.yaw),Math.sin(state.pitch));
     cam.up.copy(up); cam.lookAt(cam.position.clone().add(d)); });
   const end = e => { if (state.pointer?.[0]===e.pointerId) { state.pointer=null; canvas.style.cursor='grab'; } };
-  canvas.addEventListener('pointerup',end); canvas.addEventListener('pointercancel',end); canvas.addEventListener('wheel',e=>{e.preventDefault();cam.getWorldDirection(cameraForward);cam.position.addScaledVector(cameraForward,Math.sign(e.deltaY)*Math.max(brain?brainRadius*0.08:0.08,cam.position.length()*0.08));},{passive:false});
+  canvas.addEventListener('pointerup',end); canvas.addEventListener('pointercancel',end); canvas.addEventListener('wheel',e=>{e.preventDefault();cam.fov=THREE.MathUtils.clamp(cam.fov+(e.deltaY<0?4:-4),10,120);cam.updateProjectionMatrix();},{passive:false});
 }
 const cameraForward = new THREE.Vector3(), cameraRight = new THREE.Vector3(), cameraUp = new THREE.Vector3(), cameraMove = new THREE.Vector3();
 function setCameraMode(mode) { cameraMode = mode; cameraKeys.clear(); cameraMoveAt = performance.now(); }
@@ -165,7 +165,7 @@ function buildScene(data) {
   const pmrem = new THREE.PMREMGenerator(renderer), room = new RoomEnvironment();
   scene.environment = pmrem.fromScene(room, 0.04).texture; scene.environmentIntensity = 0.24;
   room.dispose(); pmrem.dispose();
-  camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
+  camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.005, 100); camera.up.set(0, 0, 1);
   camera.position.set(-1.2, -1.6, 1.3);
   controls = new OrbitControls(camera, renderer.domElement); controls.enabled = false; controls.enableDamping = false; controls.target.set(0, 0, 0.1);
   renderer.domElement.tabIndex = 0; renderer.domElement.addEventListener('pointerdown', () => { renderer.domElement.focus({ preventScroll: true }); setCameraMode('arena'); }); setupFreeLook(renderer.domElement,camera,false);
@@ -220,7 +220,7 @@ function buildScene(data) {
   const bw = $('#brain').clientWidth || 358, bh = $('#brain').clientHeight || 220;
   brainRenderer = new THREE.WebGLRenderer({ canvas: $('#brain'), antialias: false, alpha: true }); brainRenderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   brainRenderer.setSize(bw, bh, false);
-  brainScene = new THREE.Scene(); brainCam = new THREE.PerspectiveCamera(40, bw / bh, 1, 20000);
+  brainScene = new THREE.Scene(); brainCam = new THREE.PerspectiveCamera(75, bw / bh, 1, 20000);
   const pos = new Float32Array(data.N * 3), col = new Float32Array(data.N * 3); const c = new THREE.Vector3(); let n = 0;
   for (let i = 0; i < data.N; i++) { const x = data.soma[i * 3]; if (!Number.isFinite(x)) { pos[i * 3] = 1e6; continue; } pos[i * 3] = x * 8e-3; pos[i * 3 + 1] = data.soma[i * 3 + 1] * 8e-3; pos[i * 3 + 2] = data.soma[i * 3 + 2] * 8e-3; c.x += pos[i * 3]; c.y += pos[i * 3 + 1]; c.z += pos[i * 3 + 2]; n++; }
   c.divideScalar(n);
