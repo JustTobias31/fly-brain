@@ -12,6 +12,7 @@ import { Motor, READOUT } from './motor.js';
 import { createBrain } from '../brainmodel.js';
 import { createScaffoldSet, bindScaffoldParams, scaffoldManifest } from './scaffold/index.js';
 import { DEFAULT_BRAIN_CONTROLS, normalizeBrainControls } from './brain-controls.js';
+import { DopamineSystem } from './dopamine.js';
 
 const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x axis (heading) in world frame
 
@@ -47,6 +48,7 @@ export class FlyAgent {
     if (oaMode) nmExtra.oaMode = oaMode;
     if (oaTargets) nmExtra.oaTargets = oaTargets;
     this.neuromod = brainOpts.neuromod ? new Neuromod(data, this.brain, { calib: neuromod?.calib, block: neuromod?.block, params: { ...neuromod?.params, ...nmExtra }, minSyn: brainOpts.minSyn ?? 5 }) : null;
+    this.dopamine = new DopamineSystem(data, this.brain);
     const typeOf = data.meta.types, sideOf = data.side;
     this.senses = new Senses(bodymap, mj, M); this.senses.bindTypes(typeOf, sideOf);
     // LC10 small-object visual projection neurons: the eye-to-courtship channel. A nearby fly is detected
@@ -141,6 +143,7 @@ export class FlyAgent {
     }
   }
   setTraining(enabled) { this.trainingEnabled = !!enabled; }
+  applyDopaminePulse(value = 1) { return this.dopamine.pulse(value); }
   applyReward(value = 1) {
     if (!this.trainingEnabled || !this.synapseWeights || !this.initialSynapseWeights) return 0;
     const reward = Math.max(-5, Math.min(5, Number(value) || 0)); if (!reward) return 0;
@@ -277,6 +280,7 @@ export class FlyAgent {
     const B = this.brain; for (const i of this.driven) B.setDriveOne(i, 0);
     const brainEnergy = this.brainControls.hunger.enabled ? 1 - this.brainControls.hunger.value / 100 : this.energy;
     if (this.neuromod) this.neuromod.update(1, brainEnergy, this.flight.active ? 1 : this.motor.stepAmp || 0);
+    this.dopamine.update(1);
     // courtship context for a male: the nearest other fly's range and bearing in his head frame, plus the
     // connectome's own courtship-circuit readout (pIP10, DNp13) from the previous step
     // A courted female's own context: the nearest male, his range and bearing in her head frame, and
