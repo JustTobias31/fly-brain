@@ -30,7 +30,7 @@ All endpoints use JSON. Fly endpoints require the `X-Sim-Target` header, for exa
 }
 ```
 
-## Brain controls
+The brain endpoint accepts `?offset=0&limit=1000` (maximum page size 1,000). Each record contains the connectome index, cell type, side and accumulated spike count.\n\n## Brain controls
 
 Values for temperature, reward and smell range from -100 to 100. Hunger and courtship range from 0 to 100. Each setting has an `enabled` flag: when false, the corresponding input comes from the simulated environment/body; when true, the slider supplies the input. Resetting a slider sets its value to zero without disabling the override.
 
