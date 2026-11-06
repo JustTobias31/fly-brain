@@ -43,7 +43,7 @@ onmessage = async (e) => {
       let result;
       if (m.action === 'transform') result = m.method === 'GET' ? fly.transform() : fly.setTransform(m.body);
       else if (m.action === 'brain') result = { ...fly.brainSummary(), ...fly.brainNeurons(m.query) };
-      else if (m.action === 'controls') result = m.method === 'GET' ? fly.brainControls : fly.setBrainControls(m.body);
+      else if (m.action === 'controls') { result = m.method === 'GET' ? fly.brainControls : fly.setBrainControls(m.body); postMessage({ type:'brain-controls', controls:result }); }
       else if (m.action === 'state') result = { id: fly.id, running, t: fly.t, ...fly.transform(), energy: fly.energy, health: fly.health, alive: fly.alive };
       else if (m.action === 'play') { running = true; lastReal = performance.now(); clearTimeout(timer); loop(); result = { success: true, running }; }
       else if (m.action === 'pause' || m.action === 'stop') { running = false; clearTimeout(timer); result = { success: true, running }; }
