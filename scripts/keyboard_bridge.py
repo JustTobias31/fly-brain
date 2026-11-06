@@ -75,7 +75,7 @@ class PositionBridge:
         key = ARROWS[direction]
         self.keyboard.press(key)
         try:
-            await asyncio.sleep(min(duration, 0.35))
+            await asyncio.sleep(duration)
         finally:
             self.keyboard.release(key)
 
@@ -132,7 +132,7 @@ def main():
     parser.add_argument("--url", help="Full WebSocket URL")
     parser.add_argument("--fly-id", type=int, help="Fly ID; defaults to the currently selected fly")
     parser.add_argument("--interval", type=float, default=0.1, help="Position polling interval in seconds")
-    parser.add_argument("--studs-per-unit", type=float, default=3.57, help="Roblox studs per simulator position unit")
+    parser.add_argument("--studs-per-unit", type=float, default=160.0, help="Roblox studs per simulator position unit (0.1 world units = 16 studs)")
     parser.add_argument("--turn-sign", type=float, choices=(-1.0, 1.0), default=1.0, help="Invert left/right camera mapping with -1")
     parser.add_argument("--max-step", type=float, default=0.5, help="Ignore larger position jumps as teleports")
     args = parser.parse_args()
