@@ -72,3 +72,5 @@ body.editor-mode #panel,body.editor-mode #brainpanel{display:none!important;}
 #brain-controls .feedback-buttons button.reward{border-color:#397b55;background:#142b20}
 #brain-controls .feedback-buttons button.punish{border-color:#78434a;background:#301a20}
 #brain-controls .feedback-status{font-size:11px;color:var(--dim)}
+
+#dopamine-section{margin-top:12px;padding:10px;border-top:1px solid var(--line)}#dopamine-section h3{margin:0 0 8px;font-size:13px}#dopamine-readout .dopamine-grid{display:grid;grid-template-columns:1fr auto;gap:5px 12px;font-size:11px}#dopamine-readout .dopamine-grid b{font-variant-numeric:tabular-nums;color:var(--acc)}
