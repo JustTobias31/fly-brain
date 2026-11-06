@@ -55,3 +55,12 @@ a { color: var(--acc); }
 
 /* Dedicated controller editor hides the arena's legacy side panels. */
 body.editor-mode #panel,body.editor-mode #brainpanel{display:none!important;}
+
+#brain-controls .brain-control { padding: 8px 0; border-top: 1px solid var(--line, rgba(255,255,255,.1)); }
+#brain-controls .bc-head { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; }
+#brain-controls .bc-actions { display:flex; align-items:center; gap:7px; }
+#brain-controls .bc-actions label { display:flex; align-items:center; gap:4px; color:var(--dim); font-size:11px; }
+#brain-controls .bc-value { min-width:38px; text-align:right; color:var(--acc); font-variant-numeric:tabular-nums; }
+#brain-controls button { padding:3px 7px; font-size:11px; }
+#brain-controls input[type=range] { width:100%; margin:7px 0 2px; }
+#brain-controls .bc-scale { display:flex; justify-content:space-between; color:var(--dim); font-size:10px; }
