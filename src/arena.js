@@ -314,7 +314,7 @@ async function startHttpBridge() {
         } else {
           const match = /^fly(?:\s+|:)(\d+)$/i.exec(command.target || ''), f = match && flies.find(x => x.id === Number(match[1]));
           if (!f || !f.ready) await fetch(`/sim/${apiSessionId}/results`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:command.requestId, status:404, error:'Target fly does not exist or is not ready.' }) });
-          else f.worker.postMessage({ type:'api', action:command.action, method:command.method, body:command.body, requestId:command.requestId });
+          else f.worker.postMessage({ type:'api', action:command.action, method:command.method, body:command.body, query:command.query, requestId:command.requestId });
         }
       }
     } catch (error) { console.warn('Simulation HTTP bridge:', error.message); }
