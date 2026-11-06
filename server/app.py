@@ -420,7 +420,14 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 delivered = await route(message, exclude=ws)
                 if delivered == 0:
                     await ws.send_json({"type": "ack", "requestId": message.get("requestId"), "ok": False, "error": "Arena owner is offline"})
-            elif kind in {"ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result"} and session is not None and role == "owner":
+            elif kind in {"circuit:list", "circuit:read"} and session is not None and role == "controller":
+                if kind == "circuit:read" and not isinstance(message.get("group"), str):
+                    await ws.send_json({"type": "error", "error": "group must be a circuit key or label", "requestId": message.get("requestId")})
+                    continue
+                delivered = await route(message, exclude=ws)
+                if delivered == 0:
+                    await ws.send_json({"type": "error", "error": "Arena owner is offline", "requestId": message.get("requestId")})
+            elif kind in {"ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result", "circuit:list:result", "circuit:read:result"} and session is not None and role == "owner":
                 await route(message, exclude=ws)
             elif kind == "ping":
                 await ws.send_json({"type": "pong", "timestamp": time.time()})
