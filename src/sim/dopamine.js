@@ -21,7 +21,7 @@ export class DopamineSystem {
     const v = clamp(Math.abs(Number(value) || 0), 0, 5) / 3;
     if (value >= 0) this.positive = clamp(this.positive + v);
     else this.aversive = clamp(this.aversive + v);
-    this.level = clamp(this.level + v * 0.75);
+    this.level = clamp(this.level + (value >= 0 ? 1 : -1) * v * 0.75);
     return this.readout();
   }
   update(dtMs = 1) {
@@ -34,7 +34,8 @@ export class DopamineSystem {
     const pam = rate(this.pam, this.lastPam), ppl1 = rate(this.ppl1, this.lastPpl1), k = 1 - Math.exp(-dtMs / 80);
     this.pamHz += (pam - this.pamHz) * k; this.ppl1Hz += (ppl1 - this.ppl1Hz) * k;
     const endogenous = clamp((this.pamHz + this.ppl1Hz) / 80);
-    this.level += (Math.max(this.positive, this.aversive, endogenous) - this.level) * (1 - Math.exp(-dtMs / 180));
+    const target = clamp(endogenous + this.positive - this.aversive);
+    this.level += (target - this.level) * (1 - Math.exp(-dtMs / 180));
     this.positive *= Math.exp(-dtMs / 450); this.aversive *= Math.exp(-dtMs / 450);
     const da = this.level;
     this.receptors.Dop1R1 += (smooth(da, 0.18) - this.receptors.Dop1R1) * (1 - Math.exp(-dtMs / 120));
