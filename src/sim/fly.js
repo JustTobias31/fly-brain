@@ -18,7 +18,7 @@ const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x ax
 
 export class FlyAgent {
   constructor({ mj, flyXML, env, data, size, sign, bodymap, gait, id = 0, pos = [0, 0], yaw = 0, nProxies = 0, mode = 'descending', brainOpts = {}, vision = true, brain = null, flyvis = null, intrinsic = true, seed = 0, neuromod = null, sex = 'm' }) {
-    this.id = id; this.mj = mj; this.env = env; this.data = data; this.vision = vision; this.sex = sex; this.bodyEnabled = true; this.motion = { movement: true, rotation: true }; this.cmd = { v: 0, turn: 0 };
+    this.id = id; this.mj = mj; this.env = env; this.data = data; this.vision = vision; this.sex = sex; this.bodyEnabled = true; this.motion = { movement: true, rotation: true }; this.flightEnabled = true; this.cmd = { v: 0, turn: 0 };
     this.model = mj.MjModel.from_xml_string(buildWorldXML(flyXML, env, { flyPos: [pos[0], pos[1], 0.132], flyYaw: yaw, nProxies }));
     this.mjd = new mj.MjData(this.model);
     this.physPerMs = Math.round(0.001 / this.model.opt.timestep);
@@ -99,6 +99,14 @@ export class FlyAgent {
     if (this.rootQpos < 0) return;
     const q = this.mjd.qpos, a = this.rootQpos;
     this.motionAnchor = { position: Array.from(q.slice(a, a + 3)), rotation: Array.from(q.slice(a + 3, a + 7)) };
+  }
+  setFlightEnabled(enabled) {
+    this.flightEnabled = !!enabled;
+    if (!this.flightEnabled) {
+      this.takeoffPending = false;
+      if (this.intrinsic) this.intrinsic.takeoffUntil = 0;
+      if (this.flight.active) this.flight.phase = 'land';
+    }
   }
   setMotionOptions(options = {}) {
     const next = { movement: options.movement !== false, rotation: options.rotation !== false };
@@ -204,7 +212,7 @@ export class FlyAgent {
     this.mj.mj_forward(M, this.mjd);
     return true;
   }
-  requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
+  requestTakeoff() { if (this.flightEnabled && this.alive && !this.flight.active) this.takeoffPending = true; }
   /** (re)build the scaffold set and hand the same one to every subsystem, so a kill switch turns a
    *  mechanism off everywhere at once. Called at construction (brainOpts.scaffolds) and live by the
    *  arena's scaffold toggles; rebuilding loses plugin state, which is fine for a debug toggle. */
@@ -339,7 +347,7 @@ export class FlyAgent {
         avoiding: !!this.intrinsic?.avoid, grooming: !!this.cmd?.grooming, pivot: !!this.motor.pivot,
       }) : false;
       this.motor.flying = this.flight.active;
-      this.cmd = this.motor.apply(this.t, 1, { up: this.mjd.xmat[this.bid.thorax * 9 + 8], touching: gated, voluntary: this.takeoffPending || (this.intrinsic && this.t < this.intrinsic.takeoffUntil),
+      this.cmd = this.motor.apply(this.t, 1, { up: this.mjd.xmat[this.bid.thorax * 9 + 8], touching: gated, voluntary: this.flightEnabled && (this.takeoffPending || (this.intrinsic && this.t < this.intrinsic.takeoffUntil)),
         // song mode needs his range to her and his own ground speed (src/sim/song.js); the kick is the
         // female's rejection, which the intrinsic module times
         court: this.intrinsic?.state === 'court' ? { sing: !!this.intrinsic.courtSing, side: this.intrinsic.courtSide,
@@ -347,7 +355,7 @@ export class FlyAgent {
         kick: this.intrinsic?.kick || null,
         contact: st.bodyContact.left || st.bodyContact.right || st.antTouch.left || st.antTouch.right });   // no takeoff while pressed against something
       // takeoff: once the jump has pushed off, the wings start (tarsal reflex); an escape banks away from the threat
-      if (this.motor.launchT === this.t && !this.flight.active) {
+      if (this.flightEnabled && this.motor.launchT === this.t && !this.flight.active) {
         const th = this.env.threat; this.flight.start(this.t, { cause: this.motor.jumpCause, awayFrom: th ? [th.x, th.y] : null }); this.flights++; this.takeoffPending = false;
       }
       if (this.flight.active) {
