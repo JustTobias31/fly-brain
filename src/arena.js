@@ -880,7 +880,7 @@ window.addEventListener('message', e => {
     } else if(cmd.type==='loom:trigger'){const f=flies.find(x=>x.id===selected&&x.last);if(!f)ack(false,{},'No ready fly is selected');else{launchThreat();ack(true);}}
     else if(cmd.type==='fly:takeoff'){const targets=cmd.flyId==null?[findFly(selected)].filter(Boolean):[findFly(cmd.flyId)].filter(Boolean);if(!targets.length)ack(false,{},'Fly not found');else{for(const f of targets)f.worker.postMessage({type:'takeoff'});ack(true,{flyIds:targets.map(f=>f.id)});}}
     else if(cmd.type==='fly:transform:get'){
-      const f=findFly(cmd.flyId);if(!f?.last?.xpos||!f.bodyNames)reply('api:command-result',{requestId:cmd.requestId,ok:false,error:'Fly not found or transform unavailable'});
+      const f=findFly(cmd.flyId==null?selected:cmd.flyId);if(!f?.last?.xpos||!f.bodyNames)reply('api:command-result',{requestId:cmd.requestId,ok:false,error:'Fly not found or transform unavailable'});
       else{const bi=f.bodyNames.indexOf('thorax'),p=bi*3,q=bi*4,pos=Array.from(f.last.xpos.slice(p,p+3)),wq=f.last.xquat,rotation=[wq[q+1],wq[q+2],wq[q+3],wq[q]];reply('api:command-result',{requestId:cmd.requestId,ok:true,result:{type:'fly:transform:result',flyId:f.id,position:pos,rotation}});}
     } else if(cmd.type==='scaffold:set'){
       const config=typeof cmd.scaffold==='string'?{[cmd.scaffold]:true}:cmd.scaffold;
