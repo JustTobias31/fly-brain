@@ -18,6 +18,7 @@ outside the graph? The second list turned out to be as interesting as the first.
   in a MuJoCo body with a trained compound eye. What the pieces are and why each one is there.
 - [Run it](docs/guide/run.md). Two commands to get the arena running locally, and what the
   browser actually loads.
+- [Simulation HTTP API](docs/guide/http-api.md). Per-simulation HTTP endpoints and per-fly controls.
 - [The four apps](docs/guide/apps.md). The connectome viewer, the structures page, the arena,
   and the 3D fly.
 
