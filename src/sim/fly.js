@@ -106,7 +106,7 @@ export class FlyAgent {
   }
   brainSummary() {
     const totalSpikes = this.brain.spikeCount.reduce((a, b) => a + b, 0);
-    return { neurons: this.data.N, synapses: this.data.E, simulatedMilliseconds: this.t, totalSpikes, sex: this.sex, alive: this.alive };
+    return { neuronCount: this.data.N, synapses: this.data.E, simulatedMilliseconds: this.t, totalSpikes, sex: this.sex, alive: this.alive };
   }
   brainNeurons(query = {}) {
     const offset = Math.max(0, Math.min(this.data.N, Math.floor(Number(query.offset) || 0)));
