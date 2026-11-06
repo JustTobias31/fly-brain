@@ -60,7 +60,7 @@ async function handle(req, res) {
   else if (path === 'fly/brain' && req.method === 'GET') action = 'brain';
   else if (path === 'fly/brain/controls' && ['GET', 'POST'].includes(req.method)) { action = 'controls'; if (req.method === 'POST') body = await readBody(req); }
   else return json(res, 404, { error: 'Unknown endpoint or unsupported method.' });
-  return enqueue(session, res, { action, method: req.method, target: target ? String(target).trim() : null, body });
+  return enqueue(session, res, { action, method: req.method, target: target ? String(target).trim() : null, body, query:Object.fromEntries(url.searchParams) });
 }
 function middleware(req, res, next) {
   if (!req.url?.startsWith('/sim')) return next();
