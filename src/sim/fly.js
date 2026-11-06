@@ -79,7 +79,12 @@ export class FlyAgent {
 
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
 
-  setBrainControls(input) { this.brainControls = normalizeBrainControls(input, this.brainControls); return this.brainControls; }
+  setBrainControls(input) {
+    this.brainControls = normalizeBrainControls(input, this.brainControls);
+    const rejection = this.scaffolds?.femaleRejection;
+    if (rejection) rejection.P = { ...rejection.P, receptivity: this.brainControls.courtship.enabled ? this.brainControls.courtship.value / 100 : INTRINSIC.receptivity };
+    return this.brainControls;
+  }
   transform() {
     const s = this.state(), R = this.mjd.xmat.slice(this.bid.thorax * 9, this.bid.thorax * 9 + 9);
     return { position: s.pos, rotation: [Math.atan2(R[3], R[0]) * 180 / Math.PI, Math.atan2(-R[6], Math.hypot(R[7], R[8])) * 180 / Math.PI, Math.atan2(R[7], R[8]) * 180 / Math.PI] };
