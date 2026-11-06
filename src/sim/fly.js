@@ -118,8 +118,7 @@ export class FlyAgent {
       }
     }
     if (c.reward.enabled) {
-      const tasteGroups = Object.values(this.senses.taste).flatMap(location => Object.values(location));
-      const allTaste = new Set(tasteGroups.flat());
+      const allTaste = new Set([...Object.values(this.senses.taste.labellum).flat(), ...Object.values(this.senses.taste.peg).flat(), ...Object.values(this.senses.taste.legs).flatMap(t => Object.values(t).flat())]);
       for (const i of allTaste) rates.set(i, 0);
       if (c.reward.value) {
         const ix = c.reward.value > 0
