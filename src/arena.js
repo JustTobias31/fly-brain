@@ -377,14 +377,22 @@ function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ 
 
 const BRAIN_CONTROL_META = {
   temperature: ['Temperature', 'Coldest', 'Really hot', -100, 100],
-  reward: ['Reward / Punish', 'Punish', 'Reward', -100, 100],
   smell: ['Smell', 'Bad smell', 'Good smell', -100, 100],
   hunger: ['Hunger', 'None', 'Maximum', 0, 100],
   courtship: ['Courtship', 'None', 'Maximum', 0, 100],
 };
+const FEEDBACK_PULSES = [
+  { label: 'Yes', type: 'reward', intensity: 1 },
+  { label: 'Great', type: 'reward', intensity: 2 },
+  { label: 'Perfect!', type: 'reward', intensity: 3 },
+  { label: 'No', type: 'punish', intensity: 1 },
+  { label: 'Stop!', type: 'punish', intensity: 2 },
+  { label: 'NEVER DO THAT STUPID ASS', type: 'punish', intensity: 3 },
+];
 function renderBrainControls(f) {
   const root = $('#brain-control-list'); if (!root || !f) return;
-  root.innerHTML = Object.entries(BRAIN_CONTROL_META).map(([key, meta]) => {
+  const training = trainingEnabled ? 'checked' : '';
+  root.innerHTML = `<div class="feedback-training"><label><input type="checkbox" data-training ${training}> Enable learning (synaptic changes)</label><div class="feedback-buttons">${FEEDBACK_PULSES.map((p, i) => `<button type="button" data-feedback="${i}" class="${p.type}">${p.label}</button>`).join('')}</div><span class="feedback-status" data-feedback-status>${trainingEnabled ? 'Learning enabled' : 'Learning disabled'}</span></div>` + Object.entries(BRAIN_CONTROL_META).map(([key, meta]) => {
     const c = f.brainControls[key] || { enabled:false, value:0 }, [title, left, right, min, max] = meta;
     return `<div class="brain-control" data-control="${key}">
       <div class="bc-head"><strong>${title}</strong><span class="bc-actions">
@@ -396,6 +404,20 @@ function renderBrainControls(f) {
       <div class="bc-scale"><span>${left}</span><span>0%</span><span>${right}</span></div>
     </div>`;
   }).join('');
+  const trainingToggle = root.querySelector('[data-training]');
+  trainingToggle.onchange = () => {
+    trainingEnabled = trainingToggle.checked;
+    for (const fly of flies) if (fly.ready) fly.worker.postMessage({ type: 'training', enabled: trainingEnabled });
+    root.querySelector('[data-feedback-status]').textContent = trainingEnabled ? 'Learning enabled' : 'Learning disabled';
+  };
+  root.querySelectorAll('[data-feedback]').forEach(button => button.onclick = () => {
+    const fly = flies.find(x => x.id === selected && x.ready);
+    const pulse = FEEDBACK_PULSES[Number(button.dataset.feedback)];
+    if (!fly || !pulse) return;
+    if (!trainingEnabled) { root.querySelector('[data-feedback-status]').textContent = 'Enable learning before sending feedback'; return; }
+    fly.worker.postMessage({ type: pulse.type, intensity: pulse.intensity });
+    root.querySelector('[data-feedback-status]').textContent = `${pulse.label} pulse sent to Fly ${fly.id}`;
+  });
   root.querySelectorAll('.brain-control').forEach(row => {
     const key = row.dataset.control, slider = row.querySelector('[data-value-input]'), enabled = row.querySelector('[data-enabled]'), value = row.querySelector('[data-value]');
     const commit = () => {
