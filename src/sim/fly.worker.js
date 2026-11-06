@@ -37,6 +37,21 @@ onmessage = async (e) => {
   else if (m.type === 'scaffolds') fly.setScaffolds(m.scaffolds);
   else if (m.type === 'stimulate') fly.brain.setDrive(m.indices, m.rate);
   else if (m.type === 'takeoff') { fly.requestTakeoff(); postPose(); }
+  else if (m.type === 'brain-controls') { postMessage({ type: 'brain-controls', controls: fly.setBrainControls(m.controls) }); }
+  else if (m.type === 'api') {
+    try {
+      let result;
+      if (m.action === 'transform') result = m.method === 'GET' ? fly.transform() : fly.setTransform(m.body);
+      else if (m.action === 'brain') result = fly.brainSummary();
+      else if (m.action === 'controls') result = m.method === 'GET' ? fly.brainControls : fly.setBrainControls(m.body);
+      else if (m.action === 'state') result = { id: fly.id, running, t: fly.t, ...fly.transform(), energy: fly.energy, health: fly.health, alive: fly.alive };
+      else if (m.action === 'play') { running = true; lastReal = performance.now(); clearTimeout(timer); loop(); result = { success: true, running }; }
+      else if (m.action === 'pause' || m.action === 'stop') { running = false; clearTimeout(timer); result = { success: true, running }; }
+      else throw new Error('Unsupported simulation action.');
+      postMessage({ type: 'api-result', requestId: m.requestId, result });
+      if (m.action === 'transform' && m.method === 'POST') postPose();
+    } catch (error) { postMessage({ type: 'api-result', requestId: m.requestId, error: error.message }); }
+  }
   else if (m.type === 'activity') {
     const eyes = fly.fv ? fly.fv.lumEye.map(e => e.slice(0)) : null;
     postMessage({ type: 'activity', id: fly.id, trace: fly.brain.trace.slice(0), t: fly.t, groups: meter.read(fly.brain.spikeCount, fly.t), eyes });
