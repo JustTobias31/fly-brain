@@ -40,7 +40,8 @@ onmessage = async (e) => {
   else if (m.type === 'vision:obstacles' && fly) fly.obstaclesVisible = !!m.enabled;
   else if (m.type === 'training' && fly) fly.setTraining(m.enabled);
   else if (m.type === 'brain-controls' && fly) postMessage({ type: 'brain-controls', controls: fly.setBrainControls(m.controls) });
-  else if ((m.type === 'reward' || m.type === 'punish') && fly) { const changed = fly.applyReward((m.type === 'punish' ? -1 : 1) * Math.max(0, Math.min(5, Number(m.intensity) || 1))); postMessage({ type: 'training-result', changed, signal: m.type }); }
+  else if ((m.type === 'reward' || m.type === 'punish') && fly) { const value = (m.type === 'punish' ? -1 : 1) * Math.max(0, Math.min(5, Number(m.intensity) || 1)); const dopamine = fly.applyDopaminePulse(value); const changed = fly.applyReward(value); postMessage({ type: 'training-result', changed, dopamine, signal: m.type }); }
+  else if (m.type === 'dopamine:read' && fly) postMessage({ type: 'dopamine:read', requestId: m.requestId, flyId: fly.id, dopamine: fly.dopamine.readout() });
   else if (m.type === 'sensory_input') { if (fly) fly.externalSensoryInput = m; }
   else if (m.type === 'external_vision_frame' && fly?.fv && typeof m.pixels === 'string') {
     try { const raw = atob(m.pixels), pixels = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) pixels[i] = raw.charCodeAt(i); fly.fv.setExternalFrame({ width: m.width, height: m.height, pixels }); } catch {}
@@ -93,7 +94,7 @@ function postPose() {
   const p = fly.pose(); const st = fly.state();
   postMessage({ type: 'pose', id: fly.id, t: fly.t, xpos: p.xpos, xquat: p.xquat, cmd: fly.cmd, energy: fly.energy, health: fly.health, alive: fly.alive, eaten: fly.eaten, takeoffPending:fly.takeoffPending,
     mn9: fly.motor.mean(fly.motor.muscles.find(x => x.name.startsWith('MN9'))?.idx || []), feeding: fly.motor.feeding(), heat: st.heat || 0, nSensory: fly.driven.length,
-    foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) }, [p.xpos.buffer, p.xquat.buffer]);
+    foodEaten: fly.foodEaten.splice(0, fly.foodEaten.length, ...fly.foodEaten.map(() => 0)), behavior: fly.behavior(st), drive: fly.intrinsic?.label(), nm: fly.neuromod?.readout(), dopamine: fly.dopamine.readout(), flying: fly.flight.active, flights: fly.flights, dist: fly.dist, jumps: fly.jumps, pos: st.pos, yaw: Math.atan2(fly.mjd.xmat[fly.bid.thorax * 9 + 3], fly.mjd.xmat[fly.bid.thorax * 9]) }, [p.xpos.buffer, p.xquat.buffer]);
 }
 async function loop() {
   if (!running || loopActive) return;
