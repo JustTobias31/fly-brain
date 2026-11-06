@@ -41,6 +41,8 @@ const NO_VISION = ['0', 'false', 'off', 'no'].includes((new URLSearchParams(loca
 const env = PRESET.env();
 const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let editorActive=false, editorMode='select', editorSelected=null, editorGizmo=new THREE.Object3D();
+const EDITOR_FRAME_INTERVAL = 1000 / 40;
+let lastEditorFrame = 0;
 let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, trainingEnabled = false;
 function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';const play=$('#play');if(play)play.textContent=running?'❚❚ Pause':'▶ Run';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
@@ -681,7 +683,16 @@ const shadowOffset = new THREE.Vector3(3, 2, 8);
 function animate() {
   requestAnimationFrame(animate);
   if (document.hidden) return;
-  const now = performance.now(); fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
+  const now = performance.now();
+  // Keep the editor responsive without rendering the arena at the display's full refresh rate.
+  // The worker simulation has its own loop and is unaffected by this render cap.
+  if (editorActive) {
+    if (now - lastEditorFrame < EDITOR_FRAME_INTERVAL) return;
+    lastEditorFrame = now;
+  } else {
+    lastEditorFrame = 0;
+  }
+  fpsT += now - lastFrame; lastFrame = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsT).toFixed(0); fpsN = 0; fpsT = 0; }
   for (const f of flies) {
     const s = f.last; if (!s || !f.bodyGroups) continue;
     const previous = f.prev, blend = running && previous && s.t>previous.t ? Math.min(1,(now-f.recvAt)/f.poseInterval) : 1;
