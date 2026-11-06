@@ -344,11 +344,12 @@ async function addFly(pos, yaw, sex = 'm') {
   worker.postMessage({ type: 'speed', speed });
   worker.postMessage({ type: 'motion', options: motionOptions });
   worker.postMessage({ type: 'training', enabled: trainingEnabled });
-  renderFlyList();
+  renderFlyList(); if (id === selected) renderBrainControls(f);
   return f;
 }
 function onWorker(f, m) {
-  if (m.type === 'brain:export') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-export', N: m.N, E: m.E, weights: m.weights }, '*', [m.weights]); }
+  if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) syncBrainControls(f); }
+  else if (m.type === 'brain:export') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-export', N: m.N, E: m.E, weights: m.weights }, '*', [m.weights]); }
   else if (m.type === 'brain:imported') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-imported', ok: m.ok, error: m.error }, '*'); }
   else if (m.type === 'training-result') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'training-result', changed: m.changed, signal: m.signal }, '*'); }
   else if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); f.worker.postMessage({ type: 'arena:size', radius: env.arena.radius }); if (!controllerBody) for (const g of f.bodyGroups) if (g) g.visible = false; buildWingBlur(f, m.wingPoses); f.onReady?.(); }
