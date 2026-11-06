@@ -6,6 +6,7 @@ import { buildGroups, GroupMeter } from './groups.js';
 
 let fly = null, meter = null, running = false, speed = 1, others = [], env = null, lastReal = 0, simAhead = 0, timer = null;
 let proxyIds = [], lastPose = -Infinity, loopActive = false, bodyEnabled = true;
+let perfWindowAt = performance.now(), perfSteps = 0, perfStepMs = 0, perfFlushMs = 0, perfGpuWaitMs = 0;
 const POSE_EVERY = 1000 / 30; // wall ms: twelve workers must not flood the render thread
 
 onmessage = async (e) => {
@@ -100,12 +101,27 @@ async function loop() {
   if (!running || loopActive) return;
   loopActive = true;
   const now = performance.now(); simAhead += Math.min(100, now - lastReal) * speed; lastReal = now;
-  const t0 = performance.now(); let steps = 0;
+  const t0 = performance.now(); let steps = 0, stepMs = 0;
   // Bound both CPU bursts and GPU work in flight. An unbounded compute queue stalls WebGL
   // and leaves the motor reading increasingly old brain state when many flies share the GPU.
-  while (running && simAhead >= 1 && steps < 8 && performance.now() - t0 < 8) { fly.step(); simAhead -= 1; steps++; }
-  fly.brain.flush?.();
-  if (steps && fly.brain.device) await fly.brain.device.queue.onSubmittedWorkDone();
+  while (running && simAhead >= 1 && steps < 8 && performance.now() - t0 < 8) {
+    const stepAt = performance.now(); fly.step(); stepMs += performance.now() - stepAt; simAhead -= 1; steps++;
+  }
+  const flushAt = performance.now(); fly.brain.flush?.(); perfFlushMs += performance.now() - flushAt;
+  if (steps && fly.brain.device) {
+    const gpuAt = performance.now();
+    await fly.brain.device.queue.onSubmittedWorkDone();
+    perfGpuWaitMs += performance.now() - gpuAt;
+  }
+  perfSteps += steps; perfStepMs += stepMs;
+  const perfNow = performance.now(), perfElapsed = perfNow - perfWindowAt;
+  if (perfElapsed >= 1000) {
+    postMessage({ type: 'performance', id: fly.id, stepsPerSecond: perfSteps * 1000 / perfElapsed,
+      stepMs: perfSteps ? perfStepMs / perfSteps : 0, flushMs: perfFlushMs,
+      gpuWaitMs: perfGpuWaitMs, simulatedMsPerWallSecond: perfSteps * 1000 / perfElapsed,
+      backlogMs: simAhead, windowMs: perfElapsed });
+    perfWindowAt = perfNow; perfSteps = 0; perfStepMs = 0; perfFlushMs = 0; perfGpuWaitMs = 0;
+  }
   if (simAhead > 50) simAhead = 50;   // can't keep up: run as fast as possible
   if (steps && (!running || performance.now() - lastPose >= POSE_EVERY)) postPose();
   loopActive = false;
