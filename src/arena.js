@@ -85,6 +85,7 @@ async function main() {
   buildBrainPanel(data);
   buildScene(data);
   buildUI();
+  ensurePerfPanel();
   if (window.parent !== window) { window.parent.postMessage({ source: 'fly-arena', type: 'ready', arenaRadius: env.arena.radius }, '*'); window.parent.postMessage({ source: 'fly-arena', type: 'simulation-status', state: running ? 'running' : simulationStopped ? 'stopped' : 'paused' }, '*'); }
   $('#loading').remove();
   const st0 = PRESET.start || [0, 0, 0];
@@ -347,8 +348,30 @@ async function addFly(pos, yaw, sex = 'm') {
   renderFlyList(); if (id === selected) renderBrainControls(f);
   return f;
 }
+function ensurePerfPanel() {
+  let el = $('#simPerf');
+  if (el) return el;
+  el = document.createElement('div'); el.id = 'simPerf';
+  el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:30;padding:7px 10px;border:1px solid #343b49;border-radius:7px;background:rgba(10,14,22,.9);color:#d8e1ee;font:12px/1.45 ui-monospace,monospace;pointer-events:none;white-space:pre;backdrop-filter:blur(6px)';
+  el.textContent = 'Simulation performance\nWaiting for worker data…';
+  document.body.append(el); return el;
+}
+function showPerf(f, m) {
+  f.performance = m;
+  if (f.id !== selected) return;
+  const el = ensurePerfPanel();
+  el.textContent = [
+    'SIMULATION PERFORMANCE · fly ' + (f.id + 1),
+    m.stepsPerSecond.toFixed(2) + ' steps/s',
+    'Step: ' + m.stepMs.toFixed(2) + ' ms avg',
+    'GPU wait: ' + m.gpuWaitMs.toFixed(1) + ' ms/s',
+    'Brain flush: ' + m.flushMs.toFixed(1) + ' ms/s',
+    'Backlog: ' + m.backlogMs.toFixed(1) + ' ms'
+  ].join('\\n');
+}
 function onWorker(f, m) {
-  if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) syncBrainControls(f); }
+  if (m.type === 'performance') { showPerf(f, m); }
+  else if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) syncBrainControls(f); }
   else if (m.type === 'brain:export') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-export', N: m.N, E: m.E, weights: m.weights }, '*', [m.weights]); }
   else if (m.type === 'brain:imported') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-imported', ok: m.ok, error: m.error }, '*'); }
   else if (m.type === 'training-result') { f.lastDopamine = m.dopamine; if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'training-result', changed: m.changed, signal: m.signal, dopamine: m.dopamine }, '*'); updateDopaminePanel(f); }
