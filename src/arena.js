@@ -334,7 +334,7 @@ async function addFly(pos, yaw, sex = 'm') {
   if (nextId >= FLY_CAP) { alert(`Worker-pool cap reached: ${FLY_CAP} flies (?flies=N to raise, max ${MAX_FLIES})`); return; }
   const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, brainControls: { temperature:{enabled:false,value:0}, reward:{enabled:false,value:0}, smell:{enabled:false,value:0}, hunger:{enabled:false,value:0}, courtship:{enabled:false,value:0} }, ...buildFlyMesh(color, sex) }; f.group.visible = controllerBody; f.ring.visible = controllerBody && id === selected;
+  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, lastDopamine: null, brainControls: { temperature:{enabled:false,value:0}, reward:{enabled:false,value:0}, smell:{enabled:false,value:0}, hunger:{enabled:false,value:0}, courtship:{enabled:false,value:0} }, ...buildFlyMesh(color, sex) }; f.group.visible = controllerBody; f.ring.visible = controllerBody && id === selected;
   scene.add(f.group); flies.push(f); batches.add(f);
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: FLY_CAP - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: !NO_VISION, sex,
@@ -351,10 +351,11 @@ function onWorker(f, m) {
   if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) syncBrainControls(f); }
   else if (m.type === 'brain:export') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-export', N: m.N, E: m.E, weights: m.weights }, '*', [m.weights]); }
   else if (m.type === 'brain:imported') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'brain-imported', ok: m.ok, error: m.error }, '*'); }
-  else if (m.type === 'training-result') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'training-result', changed: m.changed, signal: m.signal }, '*'); }
+  else if (m.type === 'training-result') { f.lastDopamine = m.dopamine; if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'training-result', changed: m.changed, signal: m.signal, dopamine: m.dopamine }, '*'); updateDopaminePanel(f); }
+  else if (m.type === 'dopamine:read') { if (window.parent !== window) window.parent.postMessage({ source: 'fly-arena', type: 'api:command-result', requestId: m.requestId, ok: true, result: { type: 'dopamine:read:result', flyId: m.flyId, dopamine: m.dopamine } }, '*'); }
   else if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); f.worker.postMessage({ type: 'arena:size', radius: env.arena.radius }); if (!controllerBody) for (const g of f.bodyGroups) if (g) g.visible = false; buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
-    f.prev = f.last; f.last = m; shadowDirty = true;
+    f.prev = f.last; f.last = m; if (m.dopamine) { f.lastDopamine = m.dopamine; updateDopaminePanel(f); } shadowDirty = true;
     if (window.parent !== window) { const bi = Math.max(0, f.bodyNames?.indexOf('thorax') ?? 0), orientation = m.xquat ? Array.from(m.xquat.slice(bi * 4, bi * 4 + 4)) : [0, 0, Math.sin((m.yaw || 0) / 2), Math.cos((m.yaw || 0) / 2)]; window.parent.postMessage({ source: 'fly-arena', type: 'telemetry', body: { id: f.id, position: m.pos, yaw: m.yaw, orientation } }, '*'); }
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
     m.foodEaten?.forEach((d, k) => { if (d > 0 && env.food[k]) { env.food[k].amount = Math.max(0, env.food[k].amount - d); foodDirty = true; } });
@@ -414,9 +415,8 @@ function renderBrainControls(f) {
     const fly = flies.find(x => x.id === selected && x.ready);
     const pulse = FEEDBACK_PULSES[Number(button.dataset.feedback)];
     if (!fly || !pulse) return;
-    if (!trainingEnabled) { root.querySelector('[data-feedback-status]').textContent = 'Enable learning before sending feedback'; return; }
     fly.worker.postMessage({ type: pulse.type, intensity: pulse.intensity });
-    root.querySelector('[data-feedback-status]').textContent = `${pulse.label} pulse sent to Fly ${fly.id}`;
+    root.querySelector('[data-feedback-status]').textContent = `${pulse.label}: dopamine pulse sent to Fly ${fly.id}${trainingEnabled ? ' · synaptic learning enabled' : ' · learning disabled'}`;
   });
   root.querySelectorAll('.brain-control').forEach(row => {
     const key = row.dataset.control, slider = row.querySelector('[data-value-input]'), enabled = row.querySelector('[data-enabled]'), value = row.querySelector('[data-value]');
@@ -428,6 +428,11 @@ function renderBrainControls(f) {
     slider.oninput = commit; enabled.onchange = commit;
     row.querySelector('[data-reset]').onclick = () => { slider.value = 0; commit(); };
   });
+}
+function updateDopaminePanel(f) {
+  const root = $('#dopamine-readout'); if (!root || !f || f.id !== selected) return;
+  const d = f.lastDopamine || f.last?.dopamine; if (!d) return;
+  root.innerHTML = `<div class="note">Fly ${f.id} · simulated dopamine state</div><div class="dopamine-grid"><span>Extracellular DA</span><b>${(d.level * 100).toFixed(1)}%</b><span>Dop1R1 activation</span><b>${(d.receptors.Dop1R1 * 100).toFixed(1)}%</b><span>Dop1R2 activation</span><b>${(d.receptors.Dop1R2 * 100).toFixed(1)}%</b><span>Dop2R activation</span><b>${(d.receptors.Dop2R * 100).toFixed(1)}%</b><span>PAM-like activity</span><b>${d.pamHz.toFixed(1)} Hz</b><span>PPL1-like activity</span><b>${d.ppl1Hz.toFixed(1)} Hz</b></div>`;
 }
 function syncBrainControls(f) {
   const root = $('#brain-control-list'); if (!root) return;
@@ -832,6 +837,9 @@ window.addEventListener('message', e => {
       if(target.type==='fly'){const f=findFly(target.id);if(!f){ack(false,{},'Fly not found');}else if(['movementEnabled','rotationEnabled'].includes(cmd.property)&&typeof cmd.value==='boolean'){motionOptions[cmd.property==='movementEnabled'?'movement':'rotation']=cmd.value;for(const x of flies)if(x.ready)x.worker.postMessage({type:'motion',options:motionOptions});ack(true,{id:f.id,property:cmd.property,value:cmd.value});}else ack(false,{},'Unsupported fly property');}
       else if(target.type==='element'){let obj=null;for(const key of ['food','bitterPatches','hazards','obstacles','odors'])obj ||= env[key].find(o=>o._apiId===target.id);const allowed=['x','y','z','r','sx','sy','sz','rotation','strength','heat','sugar','amount','sigma','odor'];if(!obj)ack(false,{},'Element not found');else if(!allowed.includes(cmd.property)||!['number','string'].includes(typeof cmd.value)||(typeof cmd.value==='number'&&!Number.isFinite(cmd.value)))ack(false,{},'Unsupported property or value');else{obj[cmd.property]=cmd.value;rebuildEnv();syncEnv();postElements();ack(true,{id:target.id,property:cmd.property,value:cmd.value});}}
       else ack(false,{},'target.type must be element or fly');
+    } else if(cmd.type==='dopamine:read'){
+      const f=cmd.flyId==null?flies.find(x=>x.id===selected):findFly(cmd.flyId);
+      if(!f?.ready)ack(false,{},'Fly is not ready');else f.worker.postMessage({type:'dopamine:read',requestId:cmd.requestId});
     } else if(cmd.type==='circuit:list'||cmd.type==='circuit:read'){
       const f=cmd.flyId==null?flies.find(x=>x.id===selected):findFly(cmd.flyId);
       if(!f?.ready)ack(false,{},'Fly is not ready');
