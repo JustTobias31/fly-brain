@@ -233,11 +233,13 @@ async function addFly(pos, yaw, sex = 'm') {
   await new Promise(res => { f.onReady = res; });
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
-  renderFlyList();
+  renderFlyList(); if (id === selected) renderBrainControls(f);
   return f;
 }
 function onWorker(f, m) {
-  if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
+  if (m.type === 'api-result') fetch(`/sim/${apiSessionId}/results`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:m.requestId, result:m.result, error:m.error }) }).catch(() => {});
+  else if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) renderBrainControls(f); }
+  else if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
     const received = performance.now(); f.poseInterval = f.recvAt ? Math.max(16, Math.min(100, received-f.recvAt)) : 1000/30; f.recvAt = received;
@@ -356,7 +358,7 @@ function buildScaffoldUI() {
 function onClick(e) {
   const m = new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); raycaster.setFromCamera(m, camera);
   // select a fly?
-  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); return; } }
+  for (const f of flies) { const hit = raycaster.intersectObjects(f.meshes.filter(m => m.parent.visible), false); if (hit.length) { selected = f.id; renderFlyList(); renderBrainControls(f); return; } }
   if (tool === 'none') return;
   const hit = raycaster.intersectObject(floorMesh); if (!hit.length) return; const p = hit[0].point;
   if (tool === 'food') { env.food.push({ x: p.x, y: p.y, r: 0.25, sugar: 1, bitter: 0, water: 0.2, amount: 5 }); env.odors.push({ x: p.x, y: p.y, odor: 'vinegar', strength: 0.8, sigma: 0.7 }); }
