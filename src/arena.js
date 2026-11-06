@@ -334,7 +334,7 @@ async function addFly(pos, yaw, sex = 'm') {
   if (nextId >= FLY_CAP) { alert(`Worker-pool cap reached: ${FLY_CAP} flies (?flies=N to raise, max ${MAX_FLIES})`); return; }
   const id = nextId++; const color = FLY_COLORS[id % FLY_COLORS.length];
   const worker = new Worker(new URL('./sim/fly.worker.js', import.meta.url), { type: 'module' });
-  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, ...buildFlyMesh(color, sex) }; f.group.visible = controllerBody; f.ring.visible = controllerBody && id === selected;
+  const f = { id, worker, color, sex, ready: false, last: null, prev: null, stats: {}, brainControls: { temperature:{enabled:false,value:0}, reward:{enabled:false,value:0}, smell:{enabled:false,value:0}, hunger:{enabled:false,value:0}, courtship:{enabled:false,value:0} }, ...buildFlyMesh(color, sex) }; f.group.visible = controllerBody; f.ring.visible = controllerBody && id === selected;
   scene.add(f.group); flies.push(f); batches.add(f);
   worker.onmessage = e => onWorker(f, e.data);
   worker.postMessage({ type: 'init', id, graph: shared, meta, bodymap, flyXML, gait, env, pos, yaw, nProxies: FLY_CAP - 1, mode: $('#mode').value, brainOpts: brainParams, neuromod: neuromodCalib, vision: !NO_VISION, sex,
@@ -373,6 +373,49 @@ function broadcastOthers() {
   for (const f of flies) if (f.ready) f.worker.postMessage({ type:'others', others:poses.filter(o => o.id !== f.id) });
 }
 function syncEnv() { for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'env', env }); }
+
+const BRAIN_CONTROL_META = {
+  temperature: ['Temperature', 'Coldest', 'Really hot', -100, 100],
+  reward: ['Reward / Punish', 'Punish', 'Reward', -100, 100],
+  smell: ['Smell', 'Bad smell', 'Good smell', -100, 100],
+  hunger: ['Hunger', 'None', 'Maximum', 0, 100],
+  courtship: ['Courtship', 'None', 'Maximum', 0, 100],
+};
+function renderBrainControls(f) {
+  const root = $('#brain-control-list'); if (!root || !f) return;
+  root.innerHTML = Object.entries(BRAIN_CONTROL_META).map(([key, meta]) => {
+    const c = f.brainControls[key] || { enabled:false, value:0 }, [title, left, right, min, max] = meta;
+    return `<div class="brain-control" data-control="${key}">
+      <div class="bc-head"><strong>${title}</strong><span class="bc-actions">
+        <label><input type="checkbox" data-enabled ${c.enabled ? 'checked' : ''}> override</label>
+        <span class="bc-value" data-value>${c.value}%</span>
+        <button type="button" data-reset>Reset</button>
+      </span></div>
+      <input type="range" data-value-input min="${min}" max="${max}" step="1" value="${c.value}">
+      <div class="bc-scale"><span>${left}</span><span>0%</span><span>${right}</span></div>
+    </div>`;
+  }).join('');
+  root.querySelectorAll('.brain-control').forEach(row => {
+    const key = row.dataset.control, slider = row.querySelector('[data-value-input]'), enabled = row.querySelector('[data-enabled]'), value = row.querySelector('[data-value]');
+    const commit = () => {
+      f.brainControls[key] = { enabled: enabled.checked, value: Number(slider.value) };
+      value.textContent = slider.value + '%';
+      if (f.ready) f.worker.postMessage({ type:'brain-controls', controls:{ [key]: f.brainControls[key] } });
+    };
+    slider.oninput = commit; enabled.onchange = commit;
+    row.querySelector('[data-reset]').onclick = () => { slider.value = 0; commit(); };
+  });
+}
+function syncBrainControls(f) {
+  const root = $('#brain-control-list'); if (!root) return;
+  for (const [key, control] of Object.entries(f.brainControls)) {
+    const row = root.querySelector(`[data-control="${key}"]`); if (!row) continue;
+    const slider = row.querySelector('[data-value-input]'), enabled = row.querySelector('[data-enabled]'), value = row.querySelector('[data-value]');
+    if (document.activeElement !== slider) slider.value = control.value;
+    enabled.checked = control.enabled; value.textContent = control.value + '%';
+  }
+}
+
 
 function postElements() {
   const elements = [];
@@ -481,7 +524,7 @@ function renderFlyList() {
       <div>${f.sex === 'f' ? '♀' : '♂'} fly ${f.id} <span style="color:var(--acc)">${s.behavior || ''}</span><div class="bar"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       <span style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`; }).join('');
   $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); attachPoseGizmo(); });
-  const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f;
+  const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f; $('#brain-controls').hidden = !f; if (f) renderBrainControls(f);
   $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
   $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
   if (gizmoFlyId !== selected) attachPoseGizmo();
