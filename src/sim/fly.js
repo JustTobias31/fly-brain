@@ -11,12 +11,14 @@ import { FlyVisionFV } from './vision.js';
 import { Motor, READOUT } from './motor.js';
 import { createBrain } from '../brainmodel.js';
 import { createScaffoldSet, bindScaffoldParams, scaffoldManifest } from './scaffold/index.js';
+import { DEFAULT_BRAIN_CONTROLS, normalizeBrainControls } from './brain-controls.js';
 
 const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x axis (heading) in world frame
 
 export class FlyAgent {
   constructor({ mj, flyXML, env, data, size, sign, bodymap, gait, id = 0, pos = [0, 0], yaw = 0, nProxies = 0, mode = 'descending', brainOpts = {}, vision = true, brain = null, flyvis = null, intrinsic = true, seed = 0, neuromod = null, sex = 'm' }) {
     this.id = id; this.mj = mj; this.env = env; this.data = data; this.vision = vision; this.sex = sex;
+    this.brainControls = structuredClone(DEFAULT_BRAIN_CONTROLS);
     this.model = mj.MjModel.from_xml_string(buildWorldXML(flyXML, env, { flyPos: [pos[0], pos[1], 0.132], flyYaw: yaw, nProxies }));
     this.mjd = new mj.MjData(this.model);
     this.physPerMs = Math.round(0.001 / this.model.opt.timestep);
@@ -76,6 +78,46 @@ export class FlyAgent {
   }
 
   requestTakeoff() { if (this.alive && !this.flight.active) this.takeoffPending = true; }
+
+  setBrainControls(input) { this.brainControls = normalizeBrainControls(input, this.brainControls); return this.brainControls; }
+  transform() {
+    const s = this.state(), R = this.mjd.xmat.slice(this.bid.thorax * 9, this.bid.thorax * 9 + 9);
+    return { position: s.pos, rotation: [Math.atan2(R[3], R[0]) * 180 / Math.PI, Math.atan2(-R[6], Math.hypot(R[7], R[8])) * 180 / Math.PI, Math.atan2(R[7], R[8]) * 180 / Math.PI] };
+  }
+  setTransform(value = {}) {
+    const M = this.model, d = this.mjd;
+    let root = -1;
+    for (let j = 0; j < M.njnt; j++) if (M.jnt_type[j] === 0) { root = j; break; }
+    if (root < 0) throw new Error('Fly root free joint was not found.');
+    const a = M.jnt_qposadr[root], v = M.jnt_dofadr[root], current = this.transform();
+    const p = value.position ?? current.position, r = value.rotation ?? current.rotation;
+    if (!Array.isArray(p) || p.length !== 3 || !p.every(Number.isFinite) || !Array.isArray(r) || r.length !== 3 || !r.every(Number.isFinite)) throw new Error('position and rotation must be three-number arrays.');
+    const [rx, ry, rz] = r.map(x => x * Math.PI / 180), cr = Math.cos(rx / 2), sr = Math.sin(rx / 2), cp = Math.cos(ry / 2), sp = Math.sin(ry / 2), cy = Math.cos(rz / 2), sy = Math.sin(rz / 2);
+    d.qpos[a] = p[0]; d.qpos[a + 1] = p[1]; d.qpos[a + 2] = p[2];
+    d.qpos[a + 3] = cr * cp * cy + sr * sp * sy; d.qpos[a + 4] = sr * cp * cy - cr * sp * sy;
+    d.qpos[a + 5] = cr * sp * cy + sr * cp * sy; d.qpos[a + 6] = cr * cp * sy - sr * sp * cy;
+    for (let k = 0; k < 6; k++) d.qvel[v + k] = 0;
+    this.mj.mj_forward(M, d); return this.transform();
+  }
+  brainSummary() {
+    const totalSpikes = this.brain.spikeCount.reduce((a, b) => a + b, 0);
+    return { neurons: this.data.N, synapses: this.data.E, simulatedMilliseconds: this.t, totalSpikes, sex: this.sex, alive: this.alive };
+  }
+  applyBrainControls(rates) {
+    const c = this.brainControls, sensor = name => this.senses.S[name] || [];
+    if (c.temperature.enabled && c.temperature.value) for (const sd of ['left', 'right']) for (const i of sensor('thermosensory ' + sd)) rates.set(i, Math.max(rates.get(i) || 0, Math.abs(c.temperature.value) * 2.2));
+    if (c.smell.enabled && c.smell.value) {
+      const gloms = c.smell.value > 0 ? ['DM1', 'DM4', 'VA2', 'DP1m'] : ['V', 'DA2'];
+      for (const g of gloms) for (const sd of ['left', 'right']) for (const i of this.senses.orn[g]?.[sd] || []) rates.set(i, Math.max(rates.get(i) || 0, 6 + Math.abs(c.smell.value) * 1.6));
+    }
+    if (c.reward.enabled && c.reward.value) {
+      const ix = c.reward.value > 0
+        ? [...(this.senses.taste.labellum.sugar || []), ...(this.senses.taste.legs.T1_left.sugar || [])]
+        : [...(this.senses.taste.labellum.bitter || []), ...(this.senses.taste.legs.T1_left.bitter || [])];
+      for (const i of ix) rates.set(i, Math.max(rates.get(i) || 0, Math.abs(c.reward.value) * 1.8));
+    }
+  }
+
   /** (re)build the scaffold set and hand the same one to every subsystem, so a kill switch turns a
    *  mechanism off everywhere at once. Called at construction (brainOpts.scaffolds) and live by the
    *  arena's scaffold toggles; rebuilding loses plugin state, which is fine for a debug toggle. */
@@ -143,13 +185,14 @@ export class FlyAgent {
     const th = this.env.threat, tm = this.threatMocap * 3;
     if (th) { d.mocap_pos[tm] = th.x; d.mocap_pos[tm + 1] = th.y; d.mocap_pos[tm + 2] = th.z; } else if (d.mocap_pos[tm + 2] > -10) d.mocap_pos[tm + 2] = -20;
     const st = this.state();
-    const rates = this.senses.update(st, this.env, 1); this._sugar = st.sugar;
+    const rates = this.senses.update(st, this.env, 1); this.applyBrainControls(rates); this._sugar = st.sugar;
     if (this.eye && (this.t % 10 === 0)) { this._eyeRates = new Map(); const er = this._eyeRates; this.eye.update({ set: (ix, hz) => { for (const i of ix) er.set(i, hz); } }, this.env, 10, this.albedo); }
     if (this.fv && (this.t % 20 === 0)) { this._eyeRates = new Map(); const er = this._eyeRates; this.fv.update((ix, hz) => { for (const i of ix) er.set(i, hz); }, this.env, this.albedo, 20); }
     if (this._eyeRates) for (const [i, hz] of this._eyeRates) rates.set(i, hz);
     // apply sensory drive (clear neurons no longer driven)
     const B = this.brain; for (const i of this.driven) B.setDriveOne(i, 0);
-    if (this.neuromod) this.neuromod.update(1, this.energy, this.flight.active ? 1 : this.motor.stepAmp || 0);
+    const brainEnergy = this.brainControls.hunger.enabled ? 1 - this.brainControls.hunger.value / 100 : this.energy;
+    if (this.neuromod) this.neuromod.update(1, brainEnergy, this.flight.active ? 1 : this.motor.stepAmp || 0);
     // courtship context for a male: the nearest other fly's range and bearing in his head frame, plus the
     // connectome's own courtship-circuit readout (pIP10, DNp13) from the previous step
     // A courted female's own context: the nearest male, his range and bearing in her head frame, and
@@ -177,6 +220,8 @@ export class FlyAgent {
         if (!court || dd < court.dist) { const a = Math.atan2(o.y - st.pos[1], o.x - st.pos[0]) - yaw; court = { dist: dd, bearing: Math.atan2(Math.sin(a), Math.cos(a)) }; }
       }
       if (court) court.level = this.motor.cmd.court || 0;
+      if (this.brainControls?.courtship.enabled) court = court || { dist: 0.5, bearing: 0, level: 0 };
+      if (court && this.brainControls?.courtship.enabled) court.level = Math.max(court.level || 0, this.brainControls.courtship.value / 100);
       // LC10 drive: a nearby fly subtends a small moving object on the eye. Salience ~ angular size,
       // gated to the frontal-lateral field; the ipsilateral LC10 population carries it to pIP10.
       // The channel is the `lc10Channel` scaffold plugin; off, another fly drives no LC10 neurons.
