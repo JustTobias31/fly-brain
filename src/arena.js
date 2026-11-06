@@ -312,7 +312,7 @@ async function startHttpBridge() {
           const result = { running, flies:flies.map(f => ({ id:f.id, ready:f.ready, ...(f.last ? { position:f.last.pos, energy:f.last.energy, health:f.last.health, alive:f.last.alive, t:f.last.t } : {}) })) };
           await fetch(`/sim/${apiSessionId}/results`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:command.requestId, result }) });
         } else {
-          const match = /^fly(?:\\s+|:)(\\d+)$/i.exec(command.target || ''), f = match && flies.find(x => x.id === Number(match[1]));
+          const match = /^fly(?:\s+|:)(\d+)$/i.exec(command.target || ''), f = match && flies.find(x => x.id === Number(match[1]));
           if (!f || !f.ready) await fetch(`/sim/${apiSessionId}/results`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:command.requestId, status:404, error:'Target fly does not exist or is not ready.' }) });
           else f.worker.postMessage({ type:'api', action:command.action, method:command.method, body:command.body, requestId:command.requestId });
         }
