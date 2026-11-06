@@ -373,8 +373,8 @@ function renderFlyList() {
     return `<div class="fly ${f.id === selected ? 'sel' : ''}" data-id="${f.id}"><i class="dot" style="background:${f.color}"></i>
       <div>${f.sex === 'f' ? '♀' : '♂'} fly ${f.id} <span style="color:var(--acc)">${s.behavior || ''}</span><div class="bar"><i style="width:${e * 100}%;background:#f2c14e"></i></div><div class="bar"><i style="width:${h * 100}%;background:#4ade80"></i></div></div>
       <span style="color:var(--dim)">${s.t ? (s.t / 1000).toFixed(1) + 's' : '…'}</span></div>`; }).join('');
-  $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); });
-  const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f; $('#brain-controls').hidden = !f; if (f) renderBrainControls(f);
+  $('#flies').querySelectorAll('.fly').forEach(el => el.onclick = () => { selected = +el.dataset.id; renderFlyList(); const f = flies.find(x => x.id === selected); if (f) renderBrainControls(f); });
+  const f = flies.find(x => x.id === selected); $('#selsec').hidden = !f; $('#brain-controls').hidden = !f;
   $('#takeoff').textContent = f?.last?.takeoffPending ? (running ? 'Takeoff queued' : 'Takeoff queued · press Run') : 'Activate takeoff DNs';
   $('#takeoff').disabled = !f?.ready || f.last?.flying || f.last?.alive === false;
   if (f?.last) { const s = f.last, c = s.cmd || {};
