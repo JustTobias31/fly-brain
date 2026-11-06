@@ -189,9 +189,14 @@ function onFrame(m) {
   $('#active').textContent = act.toLocaleString();
   if (selected >= 0) renderSelection();
 }
+const RENDER_FRAME_INTERVAL = 1000 / 40;
+let lastRenderFrame = 0;
 function animate() {
   requestAnimationFrame(animate);
-  const now = performance.now(); fpsAcc += now - lastFrameT; lastFrameT = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsAcc).toFixed(0); fpsAcc = 0; fpsN = 0; }
+  const now = performance.now();
+  if (now - lastRenderFrame < RENDER_FRAME_INTERVAL) return;
+  lastRenderFrame = now;
+  fpsAcc += now - lastFrameT; lastFrameT = now; if (++fpsN === 30) { $('#fps').textContent = (30000 / fpsAcc).toFixed(0); fpsAcc = 0; fpsN = 0; }
   controls.update();
   if (lines) lines.visible = showMode !== 'somas';
   points.visible = showMode !== 'skeletons' || !lines;
