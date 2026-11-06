@@ -48,3 +48,13 @@ a { color: var(--acc); }
 #brain { flex: none; width: 100%; height: 220px; border-top: 1px solid var(--line); background: rgba(5,7,12,.6); }
 #scaffolds { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 10px; font-size: 12px; }
 #scaffolds .scf { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+#brain-control-list .brain-control { padding: 7px 0; border-bottom: 1px solid var(--line); }
+#brain-control-list .brain-control:last-child { border-bottom: 0; }
+#brain-control-list .bc-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+#brain-control-list .bc-head strong { color: var(--fg); font-size: 12px; }
+#brain-control-list .bc-actions { display: flex; align-items: center; gap: 6px; }
+#brain-control-list input[type=range] { width: 100%; margin: 6px 0 2px; }
+#brain-control-list .bc-scale { display: flex; justify-content: space-between; color: var(--dim); font-size: 10px; }
+#brain-control-list button { padding: 2px 6px; font-size: 10px; }
+#brain-control-list .bc-value { color: var(--acc); font-variant-numeric: tabular-nums; min-width: 34px; text-align: right; }
