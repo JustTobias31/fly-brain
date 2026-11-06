@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { createHash } from 'crypto';
 import fs from 'fs';
+import { simApi } from './server/sim-api.js';
 // Content hash + size of each packed data file: versioned URLs (cached forever by the decode worker)
 // and exact download progress even when the host gzips the response.
 const DATA_FILES = Object.fromEntries(['meta.json', 'neurons.flyn', 'graph.flyg', 'skeletons.flys'].map(f => {
@@ -14,7 +15,7 @@ const dropUnpacked = { name: 'drop-unpacked-data', apply: 'build', closeBundle()
 const isolation = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
 export default defineConfig({
   base: process.env.BASE_PATH || '/', // CI sets /fly-brain/ for GitHub Pages
-  plugins: [dropUnpacked],
+  plugins: [dropUnpacked, simApi()],
   define: { __DATA_FILES__: JSON.stringify(DATA_FILES) },
   server: { headers: isolation },
   preview: { headers: isolation },
