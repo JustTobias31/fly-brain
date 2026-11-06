@@ -11,6 +11,7 @@ import { FlyVisionFV } from './vision.js';
 import { Motor, READOUT } from './motor.js';
 import { createBrain } from '../brainmodel.js';
 import { createScaffoldSet, bindScaffoldParams, scaffoldManifest } from './scaffold/index.js';
+import { DEFAULT_BRAIN_CONTROLS, normalizeBrainControls } from './brain-controls.js';
 
 const Rt9 = (xm, b) => [xm[b * 9], xm[b * 9 + 3], xm[b * 9 + 6]];   // body x axis (heading) in world frame
 
@@ -37,6 +38,7 @@ export class FlyAgent {
     this.synapseWeights = this.brain.weights || this.brain.graph?.weights || null;
     this.initialSynapseWeights = this.synapseWeights?.slice() || null;
     this.trainingEnabled = false;
+    this.brainControls = structuredClone(DEFAULT_BRAIN_CONTROLS);
     this.obstaclesVisible = true;
     // hunger as hormones and octopamine (neuromod: { calib: neuromod.json, block }); needs brainOpts.neuromod, which
     // also removes the OA neurons' fast synapses from the graph
@@ -106,6 +108,37 @@ export class FlyAgent {
     const a = this.rootQpos, d = this.mjd, v = this.rootDof, anchor = this.motionAnchor;
     if (!this.motion.movement) { d.qpos.set(anchor.position, a); d.qvel.fill(0, v, v + 3); }
     if (!this.motion.rotation) { d.qpos.set(anchor.rotation, a + 3); d.qvel.fill(0, v + 3, v + 6); }
+  }
+  setBrainControls(input) {
+    this.brainControls = normalizeBrainControls(input, this.brainControls);
+    const rejection = this.scaffolds?.femaleRejection;
+    if (rejection) rejection.P = { ...rejection.P, receptivity: this.brainControls.courtship.enabled ? this.brainControls.courtship.value / 100 : INTRINSIC.receptivity };
+    return this.brainControls;
+  }
+  applyBrainControls(rates) {
+    const c = this.brainControls, sensor = name => this.senses.S[name] || [];
+    if (c.temperature.enabled) {
+      const ix = ['left', 'right'].flatMap(sd => sensor('thermosensory ' + sd));
+      const rate = c.temperature.value > 0 ? 6 + c.temperature.value * 2.14 : Math.max(0, 6 + c.temperature.value * 0.06);
+      for (const i of ix) rates.set(i, rate);
+    }
+    if (c.smell.enabled) {
+      for (const glomerulus of Object.values(this.senses.orn)) for (const ix of Object.values(glomerulus)) for (const i of ix || []) rates.set(i, 0);
+      if (c.smell.value) {
+        const gloms = c.smell.value > 0 ? ['DM1', 'DM4', 'VA2', 'DP1m'] : ['V', 'DA2'];
+        for (const g of gloms) for (const sd of ['left', 'right']) for (const i of this.senses.orn[g]?.[sd] || []) rates.set(i, 6 + Math.abs(c.smell.value) * 1.6);
+      }
+    }
+    if (c.reward.enabled) {
+      const allTaste = new Set([...Object.values(this.senses.taste.labellum).flat(), ...Object.values(this.senses.taste.peg).flat(), ...Object.values(this.senses.taste.legs).flatMap(t => Object.values(t).flat())]);
+      for (const i of allTaste) rates.set(i, 0);
+      if (c.reward.value) {
+        const ix = c.reward.value > 0
+          ? [...(this.senses.taste.labellum.sugar || []), ...Object.values(this.senses.taste.legs).flatMap(t => t.sugar || [])]
+          : [...(this.senses.taste.labellum.bitter || []), ...Object.values(this.senses.taste.legs).flatMap(t => t.bitter || [])];
+        for (const i of ix) rates.set(i, Math.abs(c.reward.value) * 1.8);
+      }
+    }
   }
   setTraining(enabled) { this.trainingEnabled = !!enabled; }
   applyReward(value = 1) {
@@ -236,13 +269,14 @@ export class FlyAgent {
     const th = this.env.threat, tm = this.threatMocap * 3;
     if (th) { d.mocap_pos[tm] = th.x; d.mocap_pos[tm + 1] = th.y; d.mocap_pos[tm + 2] = th.z; } else if (d.mocap_pos[tm + 2] > -10) d.mocap_pos[tm + 2] = -20;
     const st = this.state();
-    const rates = this.senses.update(st, this.env, 1); this._sugar = st.sugar;
+    const rates = this.senses.update(st, this.env, 1); this.applyBrainControls(rates); this._sugar = st.sugar;
     if (this.eye && (this.t % 10 === 0)) { this._eyeRates = new Map(); const er = this._eyeRates; this.eye.update({ set: (ix, hz) => { for (const i of ix) er.set(i, hz); } }, this.env, 10, this.albedo); }
     if (this.fv && (this.t % 20 === 0)) { this._eyeRates = new Map(); const er = this._eyeRates; this.fv.update((ix, hz) => { for (const i of ix) er.set(i, hz); }, this.env, this.albedo, 20); }
     if (this._eyeRates) for (const [i, hz] of this._eyeRates) rates.set(i, hz);
     // apply sensory drive (clear neurons no longer driven)
     const B = this.brain; for (const i of this.driven) B.setDriveOne(i, 0);
-    if (this.neuromod) this.neuromod.update(1, this.energy, this.flight.active ? 1 : this.motor.stepAmp || 0);
+    const brainEnergy = this.brainControls.hunger.enabled ? 1 - this.brainControls.hunger.value / 100 : this.energy;
+    if (this.neuromod) this.neuromod.update(1, brainEnergy, this.flight.active ? 1 : this.motor.stepAmp || 0);
     // courtship context for a male: the nearest other fly's range and bearing in his head frame, plus the
     // connectome's own courtship-circuit readout (pIP10, DNp13) from the previous step
     // A courted female's own context: the nearest male, his range and bearing in her head frame, and
@@ -269,7 +303,7 @@ export class FlyAgent {
         const dd = Math.hypot(o.x - st.pos[0], o.y - st.pos[1]);
         if (!court || dd < court.dist) { const a = Math.atan2(o.y - st.pos[1], o.x - st.pos[0]) - yaw; court = { dist: dd, bearing: Math.atan2(Math.sin(a), Math.cos(a)) }; }
       }
-      if (court) court.level = this.motor.cmd.court || 0;
+      if (court) court.level = this.brainControls.courtship.enabled ? this.brainControls.courtship.value / 100 : this.motor.cmd.court || 0;
       // LC10 drive: a nearby fly subtends a small moving object on the eye. Salience ~ angular size,
       // gated to the frontal-lateral field; the ipsilateral LC10 population carries it to pIP10.
       // The channel is the `lc10Channel` scaffold plugin; off, another fly drives no LC10 neurons.
@@ -278,7 +312,7 @@ export class FlyAgent {
     // Hold an explicit request until the startup/contact gates actually permit a launch.
     // The former 80 ms pulse silently expired if the user clicked just after loading.
     if (this.takeoffPending && this.intrinsic) this.intrinsic.takeoffUntil = this.intrinsic.t + 80;
-    if (this.intrinsic) this.intrinsic.update(1, B, { energy: this.energy, arousal: this.neuromod?.arousal, touch: st.antTouch, rearing: st.pitchUp > 0.45 && this.motor.jumpT < 0 && !this.motor.righting,
+    if (this.intrinsic) this.intrinsic.update(1, B, { energy: brainEnergy, arousal: this.neuromod?.arousal, touch: st.antTouch, rearing: st.pitchUp > 0.45 && this.motor.jumpT < 0 && !this.motor.righting,
       heat: { left: heatAt(st.antenna.left, this.env), right: heatAt(st.antenna.right, this.env) }, sugar: this._sugar || 0, flying: this.flight.active, ahead: st.ahead, court, suitor,
       mouthOnFood: this.env.food.some(f => f.amount > 0 && Math.hypot(st.labellum[0] - f.x, st.labellum[1] - f.y) < f.r - 0.02) });
     const nd = new Int32Array(rates.size); let k = 0; for (const [i, hz] of rates) { B.setDriveOne(i, hz); nd[k++] = i; } this.driven = nd;
