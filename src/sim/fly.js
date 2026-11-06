@@ -105,7 +105,7 @@ export class FlyAgent {
   }
   applyBrainControls(rates) {
     const c = this.brainControls, sensor = name => this.senses.S[name] || [];
-    if (c.temperature.enabled && c.temperature.value) for (const sd of ['left', 'right']) for (const i of sensor('thermosensory ' + sd)) rates.set(i, Math.max(rates.get(i) || 0, Math.abs(c.temperature.value) * 2.2));
+    if (c.temperature.enabled && c.temperature.value) for (const sd of ['left', 'right']) for (const i of sensor('thermosensory ' + sd)) rates.set(i, Math.max(rates.get(i) || 0, (c.temperature.value > 0 ? 220 : Math.max(0, 6 + c.temperature.value * 0.05))));
     if (c.smell.enabled && c.smell.value) {
       const gloms = c.smell.value > 0 ? ['DM1', 'DM4', 'VA2', 'DP1m'] : ['V', 'DA2'];
       for (const g of gloms) for (const sd of ['left', 'right']) for (const i of this.senses.orn[g]?.[sd] || []) rates.set(i, Math.max(rates.get(i) || 0, 6 + Math.abs(c.smell.value) * 1.6));
