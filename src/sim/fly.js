@@ -243,14 +243,15 @@ export class FlyAgent {
         const dd = Math.hypot(o.x - st.pos[0], o.y - st.pos[1]);
         if (!court || dd < court.dist) { const a = Math.atan2(o.y - st.pos[1], o.x - st.pos[0]) - yaw; court = { dist: dd, bearing: Math.atan2(Math.sin(a), Math.cos(a)) }; }
       }
-      if (court) court.level = this.motor.cmd.court || 0;
-      if (this.brainControls?.courtship.enabled) court = court || { dist: 0.5, bearing: 0, level: 0 };
-      if (court && this.brainControls?.courtship.enabled) court.level = this.brainControls.courtship.value / 100;
       // LC10 drive: a nearby fly subtends a small moving object on the eye. Salience ~ angular size,
       // gated to the frontal-lateral field; the ipsilateral LC10 population carries it to pIP10.
       // The channel is the `lc10Channel` scaffold plugin; off, another fly drives no LC10 neurons.
       this.scaffolds.lc10Channel?.drive(this, st, rates, Math.atan2(fx[1], fx[0]));
     }
+    if (this.sex !== 'f' && this.brainControls.courtship.enabled) {
+      court = court || { dist: 0.5, bearing: 0, level: 0 };
+      court.level = this.brainControls.courtship.value / 100;
+    } else if (court) court.level = this.motor.cmd.court || 0;
     // Hold an explicit request until the startup/contact gates actually permit a launch.
     // The former 80 ms pulse silently expired if the user clicked just after loading.
     if (this.takeoffPending && this.intrinsic) this.intrinsic.takeoffUntil = this.intrinsic.t + 80;
