@@ -51,7 +51,7 @@ async function handle(req, res) {
   const target = req.headers['x-sim-target'];
   if (path.startsWith('fly/')) {
     if (!target) return json(res, 400, { error: 'Missing X-Sim-Target header.' });
-    if (!/^fly(?:\\s+|:)(\\d+)$/i.test(String(target).trim())) return json(res, 400, { error: 'X-Sim-Target must identify a fly, e.g. "fly 0".' });
+    if (!/^fly(?:\s+|:)(\d+)$/i.test(String(target).trim())) return json(res, 400, { error: 'X-Sim-Target must identify a fly, e.g. "fly 0".' });
   }
   let action, body = {};
   if (['play', 'pause', 'stop'].includes(path) && req.method === 'POST') action = path;
