@@ -103,6 +103,14 @@ export class FlyAgent {
     const totalSpikes = this.brain.spikeCount.reduce((a, b) => a + b, 0);
     return { neurons: this.data.N, synapses: this.data.E, simulatedMilliseconds: this.t, totalSpikes, sex: this.sex, alive: this.alive };
   }
+  brainNeurons(query = {}) {
+    const offset = Math.max(0, Math.min(this.data.N, Math.floor(Number(query.offset) || 0)));
+    const limit = Math.max(1, Math.min(1000, Math.floor(Number(query.limit) || 1000)));
+    const end = Math.min(this.data.N, offset + limit), types = this.data.meta.types, side = this.data.side, spikes = this.brain.spikeCount;
+    const neurons = [];
+    for (let i = offset; i < end; i++) neurons.push({ index:i, type:types[i], side:side[i], spikes:spikes[i] });
+    return { total:this.data.N, offset, limit, neurons };
+  }
   applyBrainControls(rates) {
     const c = this.brainControls, sensor = name => this.senses.S[name] || [];
     if (c.temperature.enabled) {
