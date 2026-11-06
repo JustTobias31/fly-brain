@@ -245,7 +245,7 @@ export class FlyAgent {
       }
       if (court) court.level = this.motor.cmd.court || 0;
       if (this.brainControls?.courtship.enabled) court = court || { dist: 0.5, bearing: 0, level: 0 };
-      if (court && this.brainControls?.courtship.enabled) court.level = Math.max(court.level || 0, this.brainControls.courtship.value / 100);
+      if (court && this.brainControls?.courtship.enabled) court.level = this.brainControls.courtship.value / 100;
       // LC10 drive: a nearby fly subtends a small moving object on the eye. Salience ~ angular size,
       // gated to the frontal-lateral field; the ipsilateral LC10 population carries it to pIP10.
       // The channel is the `lc10Channel` scaffold plugin; off, another fly drives no LC10 neurons.
