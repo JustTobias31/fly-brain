@@ -1,69 +1,118 @@
 #!/usr/bin/env python3
-"""Map fly motor-circuit activity to arrow keys.
+"""Follow the selected fly's position and heading with Roblox arrow keys.
+
 Install: py -m pip install websockets pynput
 Run:     py scripts/keyboard_bridge.py SESSION_ID
-Stop with Ctrl+C; held keys are released on exit.
+Optional: --fly-id 2 --studs-per-unit 3.57
+
+Roblox assumptions: WalkSpeed 16; a quick left/right tap turns the camera 5 degrees.
+Focus the Roblox window before running. Ctrl+C releases every held key.
 """
 import argparse
 import asyncio
 import json
+import math
 import sys
 from itertools import count
+
 import websockets
 from pynput.keyboard import Controller, Key
 
-KEYS = {"left": Key.left, "right": Key.right, "forward": Key.up, "backward": Key.down}
+ARROWS = {"forward": Key.up, "backward": Key.down, "left": Key.left, "right": Key.right}
+TURN_STEP_DEG = 5.0
 
-class Bridge:
-    def __init__(self, threshold, interval):
-        self.keyboard = Controller()
-        self.threshold = threshold
+class PositionBridge:
+    def __init__(self, fly_id, interval, studs_per_unit, turn_sign, max_step):
+        self.fly_id = fly_id
         self.interval = interval
-        self.held = set()
+        self.studs_per_unit = studs_per_unit
+        self.turn_sign = turn_sign
+        self.max_step = max_step
+        self.keyboard = Controller()
         self.ids = count(1)
+        self.previous = None
+        self.turn_remainder = 0.0
 
-    def set_keys(self, wanted):
-        for name in self.held - wanted:
-            self.keyboard.release(KEYS[name])
-        for name in wanted - self.held:
-            self.keyboard.press(KEYS[name])
-        self.held = set(wanted)
-
-    def release_all(self):
-        self.set_keys(set())
-
-    async def request(self, ws, kind, group=None):
-        request_id = "keybridge-" + str(next(self.ids))
-        msg = {"type": kind, "requestId": request_id}
-        if group is not None:
-            msg["group"] = group
-        await ws.send(json.dumps(msg))
+    async def request_transform(self, ws):
+        request_id = f"position-bridge-{next(self.ids)}"
+        message = {"type": "fly:transform:get", "requestId": request_id}
+        if self.fly_id is not None:
+            message["flyId"] = self.fly_id
+        await ws.send(json.dumps(message))
         while True:
-            response = json.loads(await asyncio.wait_for(ws.recv(), timeout=3))
+            raw = await asyncio.wait_for(ws.recv(), timeout=3)
+            response = json.loads(raw)
             if response.get("requestId") != request_id:
                 if response.get("type") == "error":
-                    raise RuntimeError(response.get("error", "API error"))
+                    raise RuntimeError(response.get("error", "WebSocket API error"))
                 continue
             if response.get("type") == "error" or response.get("error"):
-                raise RuntimeError(response.get("error", "Circuit read failed"))
+                raise RuntimeError(response.get("error", "Could not read fly transform"))
+            if not all(k in response for k in ("position", "rotation")):
+                raise RuntimeError(f"Unexpected transform response: {response}")
             return response
 
-    def update(self, steering, forward, backward):
-        left = max(0.0, float(steering.get("leftHz") or 0))
-        right = max(0.0, float(steering.get("rightHz") or 0))
-        fwd = (float(forward.get("leftHz") or 0) + float(forward.get("rightHz") or 0)) / 2
-        back = (float(backward.get("leftHz") or 0) + float(backward.get("rightHz") or 0)) / 2
-        wanted = set()
-        if left >= self.threshold and left > right:
-            wanted.add("left")
-        elif right >= self.threshold and right > left:
-            wanted.add("right")
-        if fwd >= self.threshold and fwd >= back:
-            wanted.add("forward")
-        elif back >= self.threshold:
-            wanted.add("backward")
-        self.set_keys(wanted)
-        print(f"Steer L/R {left:.2f}/{right:.2f} Hz | forward {fwd:.2f} | backward {back:.2f} | keys: {', '.join(sorted(wanted)) or '-'}", end="\r", flush=True)
+    @staticmethod
+    def yaw_from_quaternion(q):
+        x, y, z, w = map(float, q)
+        return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+
+    @staticmethod
+    def angle_delta(current, previous):
+        return (current - previous + math.pi) % (2 * math.pi) - math.pi
+
+    async def tap_turn(self, direction):
+        key = ARROWS[direction]
+        self.keyboard.press(key)
+        await asyncio.sleep(0.045)
+        self.keyboard.release(key)
+        await asyncio.sleep(0.035)
+
+    async def move(self, direction, distance):
+        duration = distance * self.studs_per_unit / 16.0
+        if duration <= 0.005:
+            return
+        key = ARROWS[direction]
+        self.keyboard.press(key)
+        try:
+            await asyncio.sleep(min(duration, 0.35))
+        finally:
+            self.keyboard.release(key)
+
+    async def update(self, transform):
+        position = tuple(map(float, transform["position"]))
+        yaw = self.yaw_from_quaternion(transform["rotation"])
+        fly_id = transform.get("flyId", self.fly_id)
+        if self.previous is None:
+            self.previous = (position, yaw)
+            print(f"Tracking fly {fly_id}; initial position recorded. No movement yet.")
+            return
+
+        old_position, old_yaw = self.previous
+        self.previous = (position, yaw)
+        dx, dy = position[0] - old_position[0], position[1] - old_position[1]
+        distance = math.hypot(dx, dy)
+        turn = self.angle_delta(yaw, old_yaw) * self.turn_sign
+        self.turn_remainder += math.degrees(turn)
+        taps = int(abs(self.turn_remainder) // TURN_STEP_DEG)
+        direction = "right" if self.turn_remainder > 0 else "left"
+        taps = min(taps, 12)
+        for _ in range(taps):
+            await self.tap_turn(direction)
+        if taps:
+            self.turn_remainder -= math.copysign(taps * TURN_STEP_DEG, self.turn_remainder)
+
+        if distance > self.max_step:
+            print(f"Ignored position jump ({distance:.3f} sim units); recalibrated baseline.")
+            return
+        if distance > 1e-5:
+            # Project displacement onto the fly's current forward direction.
+            forward_x, forward_y = math.cos(yaw), math.sin(yaw)
+            forward_distance = dx * forward_x + dy * forward_y
+            if abs(forward_distance) > 1e-5:
+                await self.move("forward" if forward_distance > 0 else "backward", abs(forward_distance))
+
+        print(f"Fly {fly_id} | Δx {dx:+.3f} Δy {dy:+.3f} | turn {math.degrees(turn):+.1f}° | taps {taps} | move {distance:.3f}", flush=True)
 
     async def run(self, url):
         print("Connecting:", url)
@@ -71,35 +120,26 @@ class Bridge:
             hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
             if hello.get("type") != "connected":
                 raise RuntimeError("Unexpected WebSocket handshake: " + str(hello))
-            print("Connected to session", hello.get("session_id"))
-            listing = await self.request(ws, "circuit:list")
-            keys = {g.get("key") for g in listing.get("groups", [])}
-            missing = {"steer", "walk", "back"} - keys
-            if missing:
-                raise RuntimeError("Missing circuit groups: " + ", ".join(sorted(missing)))
-            print("Reading motor activity. Focus the application you want to control; Ctrl+C stops.")
+            print("Connected. Focus Roblox now; Ctrl+C stops the bridge.")
             while True:
-                try:
-                    steer = await self.request(ws, "circuit:read", "steer")
-                    walk = await self.request(ws, "circuit:read", "walk")
-                    back = await self.request(ws, "circuit:read", "back")
-                    self.update(steer.get("group", {}), walk.get("group", {}), back.get("group", {}))
-                    await asyncio.sleep(self.interval)
-                except (asyncio.TimeoutError, websockets.ConnectionClosed):
-                    self.release_all()
-                    raise
+                transform = await self.request_transform(ws)
+                await self.update(transform)
+                await asyncio.sleep(self.interval)
 
 def main():
-    parser = argparse.ArgumentParser(description="Control arrow keys from fly motor-circuit activity")
-    parser.add_argument("session_id", help="ID from ws://localhost:5173/ws/SESSION_ID")
+    parser = argparse.ArgumentParser(description="Mirror fly position and heading with Roblox arrow keys")
+    parser.add_argument("session_id", help="Session ID from ws://localhost:5173/ws/SESSION_ID")
     parser.add_argument("--url", help="Full WebSocket URL")
-    parser.add_argument("--threshold", type=float, default=0.5, help="Minimum firing rate in Hz")
-    parser.add_argument("--interval", type=float, default=0.1, help="Read interval in seconds")
+    parser.add_argument("--fly-id", type=int, help="Fly ID; defaults to the currently selected fly")
+    parser.add_argument("--interval", type=float, default=0.1, help="Position polling interval in seconds")
+    parser.add_argument("--studs-per-unit", type=float, default=3.57, help="Roblox studs per simulator position unit")
+    parser.add_argument("--turn-sign", type=float, choices=(-1.0, 1.0), default=1.0, help="Invert left/right camera mapping with -1")
+    parser.add_argument("--max-step", type=float, default=0.5, help="Ignore larger position jumps as teleports")
     args = parser.parse_args()
-    if args.threshold < 0 or args.interval < 0.02:
-        parser.error("threshold must be non-negative and interval at least 0.02 seconds")
+    if args.interval < 0.03 or args.studs_per_unit <= 0 or args.max_step <= 0:
+        parser.error("interval, studs-per-unit and max-step must be positive (interval >= 0.03)")
     url = args.url or f"ws://localhost:5173/ws/{args.session_id}"
-    bridge = Bridge(args.threshold, args.interval)
+    bridge = PositionBridge(args.fly_id, args.interval, args.studs_per_unit, args.turn_sign, args.max_step)
     try:
         asyncio.run(bridge.run(url))
     except KeyboardInterrupt:
@@ -108,7 +148,8 @@ def main():
         print("\nBridge error:", exc, file=sys.stderr)
         return 1
     finally:
-        bridge.release_all()
+        for key in ARROWS.values():
+            bridge.keyboard.release(key)
     return 0
 
 if __name__ == "__main__":
