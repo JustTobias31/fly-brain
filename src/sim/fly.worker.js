@@ -38,6 +38,7 @@ onmessage = async (e) => {
   else if (m.type === 'set_pose' && fly) { if (fly.setPose(m.position, m.quaternion)) postPose(); }
   else if (m.type === 'arena:size' && fly) { if (fly.setArenaRadius(m.radius)) postPose(); }
   else if (m.type === 'motion' && fly) fly.setMotionOptions(m.options);
+  else if (m.type === 'flight:enabled' && fly) fly.setFlightEnabled(m.enabled);
   else if (m.type === 'vision:obstacles' && fly) fly.obstaclesVisible = !!m.enabled;
   else if (m.type === 'training' && fly) fly.setTraining(m.enabled);
   else if (m.type === 'brain-controls' && fly) postMessage({ type: 'brain-controls', controls: fly.setBrainControls(m.controls) });
