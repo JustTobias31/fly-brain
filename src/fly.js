@@ -267,10 +267,16 @@ function refreshShadow(t) {
   for(const e of shadowCasters){e.matrix.copy(e.mesh.matrixWorld);e.visible=e.nextVisible;}
   renderer.shadowMap.needsUpdate=true;metrics.shadowUpdates++;
 }
+const RENDER_FRAME_INTERVAL = 1000 / 40;
+let lastRenderFrame = 0;
 function tick() {
   requestAnimationFrame(tick);
+  if (document.hidden) return;
+  const now = performance.now();
+  if (now - lastRenderFrame < RENDER_FRAME_INTERVAL) return;
+  lastRenderFrame = now;
   clock.update();
-  if (document.hidden) return; const dt = Math.min(clock.getDelta(), 0.05), t = clock.getElapsed();
+  const dt = Math.min(clock.getDelta(), 0.05), t = clock.getElapsed();
   state.wingBlend += ((state.wings === 'rest' ? 0 : 1) - state.wingBlend) * (1 - Math.exp(-dt * 5));
   state.flight += ((state.wings === 'flight' ? 1 : 0) - state.flight) * (1 - Math.exp(-dt * 4));
   const wb = state.wingBlend * state.wingBlend * (3 - 2 * state.wingBlend);
