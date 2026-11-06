@@ -73,7 +73,10 @@ export class FlyVisionFV {
       const az = Math.atan2(y, x), el = Math.asin(Math.max(-1, Math.min(1, z)));
       const u = Math.max(0, Math.min(1, 0.5 + az / (2 * maxAz)));
       const v = Math.max(0, Math.min(1, 0.5 - el / (2 * maxEl)));
-      const px = Math.round(u * (width - 1)), py = Math.round(v * (height - 1));
+      const eye = r < this.nCol ? 0 : 1;
+      const eyeWidth = width === 128 && height === 64 ? 64 : width;
+      const px = (width === 128 && height === 64 ? eye * 64 : 0) + Math.round(u * (eyeWidth - 1));
+      const py = Math.round(v * (height - 1));
       this.lum[r] = pixels[py * width + px] / 255;
     }
     this.lumEye[0].set(this.lum.subarray(0, this.nCol));
