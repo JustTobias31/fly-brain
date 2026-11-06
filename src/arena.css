@@ -64,3 +64,11 @@ body.editor-mode #panel,body.editor-mode #brainpanel{display:none!important;}
 #brain-controls button { padding:3px 7px; font-size:11px; }
 #brain-controls input[type=range] { width:100%; margin:7px 0 2px; }
 #brain-controls .bc-scale { display:flex; justify-content:space-between; color:var(--dim); font-size:10px; }
+
+#brain-controls .feedback-training{padding:8px 0 10px;border-bottom:1px solid var(--line);display:grid;gap:8px}
+#brain-controls .feedback-training>label{display:flex;align-items:center;gap:6px;font-size:12px}
+#brain-controls .feedback-buttons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+#brain-controls .feedback-buttons button{min-height:30px;padding:5px 6px;font-size:11px;white-space:normal}
+#brain-controls .feedback-buttons button.reward{border-color:#397b55;background:#142b20}
+#brain-controls .feedback-buttons button.punish{border-color:#78434a;background:#301a20}
+#brain-controls .feedback-status{font-size:11px;color:var(--dim)}
