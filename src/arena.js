@@ -367,7 +367,7 @@ function showPerf(f, m) {
     'GPU wait: ' + m.gpuWaitMs.toFixed(1) + ' ms/s',
     'Brain flush: ' + m.flushMs.toFixed(1) + ' ms/s',
     'Backlog: ' + m.backlogMs.toFixed(1) + ' ms'
-  ].join('\\n');
+  ].join('\n');
 }
 function onWorker(f, m) {
   if (m.type === 'performance') { showPerf(f, m); }
