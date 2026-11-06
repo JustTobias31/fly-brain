@@ -105,16 +105,28 @@ export class FlyAgent {
   }
   applyBrainControls(rates) {
     const c = this.brainControls, sensor = name => this.senses.S[name] || [];
-    if (c.temperature.enabled && c.temperature.value) for (const sd of ['left', 'right']) for (const i of sensor('thermosensory ' + sd)) rates.set(i, Math.max(rates.get(i) || 0, (c.temperature.value > 0 ? 220 : Math.max(0, 6 + c.temperature.value * 0.05))));
-    if (c.smell.enabled && c.smell.value) {
-      const gloms = c.smell.value > 0 ? ['DM1', 'DM4', 'VA2', 'DP1m'] : ['V', 'DA2'];
-      for (const g of gloms) for (const sd of ['left', 'right']) for (const i of this.senses.orn[g]?.[sd] || []) rates.set(i, Math.max(rates.get(i) || 0, 6 + Math.abs(c.smell.value) * 1.6));
+    if (c.temperature.enabled) {
+      const ix = ['left', 'right'].flatMap(sd => sensor('thermosensory ' + sd));
+      const rate = c.temperature.value > 0 ? 6 + c.temperature.value * 2.14 : Math.max(0, 6 + c.temperature.value * 0.06);
+      for (const i of ix) rates.set(i, rate);
     }
-    if (c.reward.enabled && c.reward.value) {
-      const ix = c.reward.value > 0
-        ? [...(this.senses.taste.labellum.sugar || []), ...(this.senses.taste.legs.T1_left.sugar || [])]
-        : [...(this.senses.taste.labellum.bitter || []), ...(this.senses.taste.legs.T1_left.bitter || [])];
-      for (const i of ix) rates.set(i, Math.max(rates.get(i) || 0, Math.abs(c.reward.value) * 1.8));
+    if (c.smell.enabled) {
+      for (const glomerulus of Object.values(this.senses.orn)) for (const ix of Object.values(glomerulus)) for (const i of ix || []) rates.set(i, 0);
+      if (c.smell.value) {
+        const gloms = c.smell.value > 0 ? ['DM1', 'DM4', 'VA2', 'DP1m'] : ['V', 'DA2'];
+        for (const g of gloms) for (const sd of ['left', 'right']) for (const i of this.senses.orn[g]?.[sd] || []) rates.set(i, 6 + Math.abs(c.smell.value) * 1.6);
+      }
+    }
+    if (c.reward.enabled) {
+      const tasteGroups = Object.values(this.senses.taste).flatMap(location => Object.values(location));
+      const allTaste = new Set(tasteGroups.flat());
+      for (const i of allTaste) rates.set(i, 0);
+      if (c.reward.value) {
+        const ix = c.reward.value > 0
+          ? [...(this.senses.taste.labellum.sugar || []), ...Object.values(this.senses.taste.legs).flatMap(t => t.sugar || [])]
+          : [...(this.senses.taste.labellum.bitter || []), ...Object.values(this.senses.taste.legs).flatMap(t => t.bitter || [])];
+        for (const i of ix) rates.set(i, Math.abs(c.reward.value) * 1.8);
+      }
     }
   }
 
