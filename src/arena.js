@@ -43,7 +43,7 @@ const flies = [];          // {id, worker, group, bodies[], last, color, ready}
 let editorActive=false, editorMode='select', editorSelected=null, editorGizmo=new THREE.Object3D();
 const RENDER_FRAME_INTERVAL = 1000 / 40;
 let lastRenderFrame = 0;
-let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, trainingEnabled = false;
+let flyvisMap, shared, meta, bodymap, flyXML, gait, visual, batches, outputPass, running = true, simulationStopped = false, selected = 0, tool = 'none', speed = 2, brainMem, wasmModule, brainParams, neuromodCalib, motionOptions = { movement: true, rotation: true }, flightEnabled = true, trainingEnabled = false;
 function setSimulationState(state){running=state==='running';simulationStopped=state==='stopped';const play=$('#play');if(play)play.textContent=running?'❚❚ Pause':'▶ Run';for(const f of flies)if(f.ready)f.worker.postMessage({type:running?'run':'pause'});if(window.parent!==window)window.parent.postMessage({source:'fly-arena',type:'simulation-status',state},'*');}
 
 function toShared(ta) { const sab = new SharedArrayBuffer(ta.byteLength); const out = new ta.constructor(sab); out.set(ta); return out; }
@@ -346,6 +346,7 @@ async function addFly(pos, yaw, sex = 'm') {
   if (running) worker.postMessage({ type: 'run' });
   worker.postMessage({ type: 'speed', speed });
   worker.postMessage({ type: 'motion', options: motionOptions });
+  worker.postMessage({ type: 'flight:enabled', enabled: flightEnabled });
   worker.postMessage({ type: 'training', enabled: trainingEnabled });
   renderFlyList(); if (id === selected) renderBrainControls(f);
   return f;
@@ -792,6 +793,8 @@ window.addEventListener('message', e => {
     motionOptions.movement = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'motion', options: motionOptions });
   } else if (m.type === 'controller:rotation-enabled') {
     motionOptions.rotation = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'motion', options: motionOptions });
+  } else if (m.type === 'controller:flight-enabled') {
+    flightEnabled = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'flight:enabled', enabled: flightEnabled });
   } else if (m.type === 'controller:training') {
     trainingEnabled = !!m.enabled; for (const f of flies) if (f.ready) f.worker.postMessage({ type: 'training', enabled: trainingEnabled });
   } else if (m.type === 'controller:brain-export') {
