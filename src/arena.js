@@ -331,7 +331,8 @@ async function startHttpBridge() {
   };
   poll();
 }
-\n// ---------------- UI ----------------
+
+// ---------------- UI ----------------
 function buildUI() {
   $('#play').onclick = () => { running = !running; for (const f of flies) f.worker.postMessage({ type: running ? 'run' : 'pause' }); $('#play').textContent = running ? '❚❚ Pause' : '▶ Run'; };
   $('#addFly').onclick = () => { const a = Math.random() * Math.PI * 2, r = Math.random() * env.arena.radius * 0.6; addFly([r * Math.cos(a), r * Math.sin(a)], Math.random() * Math.PI * 2); };
