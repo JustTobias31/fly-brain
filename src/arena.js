@@ -238,7 +238,7 @@ async function addFly(pos, yaw, sex = 'm') {
 }
 function onWorker(f, m) {
   if (m.type === 'api-result') fetch(`/sim/${apiSessionId}/results`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ requestId:m.requestId, result:m.result, error:m.error }) }).catch(() => {});
-  else if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) renderBrainControls(f); }
+  else if (m.type === 'brain-controls') { f.brainControls = m.controls; if (f.id === selected) syncBrainControls(f); }
   else if (m.type === 'ready') { f.ready = true; f.bodyNames = m.bodyNames; f.bodyGroups = m.bodyNames.map(n => f.bodies[n] || null); buildWingBlur(f, m.wingPoses); f.onReady?.(); }
   else if (m.type === 'pose') {
     f.prev = f.last; f.last = m; shadowDirty = true;
@@ -290,6 +290,15 @@ function renderBrainControls(f) {
     slider.oninput = commit; enabled.onchange = commit;
     row.querySelector('[data-reset]').onclick = () => { slider.value = 0; commit(); };
   });
+}
+function syncBrainControls(f) {
+  const root = $('#brain-control-list'); if (!root) return;
+  for (const [key, control] of Object.entries(f.brainControls)) {
+    const row = root.querySelector(`[data-control="${key}"]`); if (!row) continue;
+    const slider = row.querySelector('[data-value-input]'), enabled = row.querySelector('[data-enabled]'), value = row.querySelector('[data-value]');
+    if (document.activeElement !== slider) slider.value = control.value;
+    enabled.checked = control.enabled; value.textContent = control.value + '%';
+  }
 }
 async function startHttpBridge() {
   const created = await fetch('/sim', { method:'POST' }).then(r => { if (!r.ok) throw new Error('Could not create HTTP simulation session'); return r.json(); });
