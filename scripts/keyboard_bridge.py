@@ -6,7 +6,7 @@ Run:     py scripts/keyboard_bridge.py SESSION_ID
 Optional: --fly-id 2 --studs-per-unit 160
 
 Forward/backward/left/right movement becomes relative mouse movement.
-A rising Giant Fibre activity event produces one left click.
+Positive DNp01 activity produces one left click per firing event.
 Focus the target window before running. Ctrl+C stops the bridge.
 """
 import argparse
@@ -61,13 +61,13 @@ def click_left():
         raise ctypes.WinError()
 
 class PositionBridge:
-    def __init__(self, fly_id, interval, pixels_per_unit, turn_sign, max_step, giant_threshold):
+    def __init__(self, fly_id, interval, pixels_per_unit, turn_sign, max_step):
         self.fly_id = fly_id
         self.interval = interval
         self.pixels_per_unit = pixels_per_unit
         self.turn_sign = turn_sign
         self.max_step = max_step
-        self.giant_threshold = giant_threshold
+        self.dnp01_was_active = False
         self.ids = count(1)
         self.previous = None
         self.giant_was_active = False
@@ -97,26 +97,35 @@ class PositionBridge:
             raise RuntimeError(f"Unexpected transform response: {response}")
         return response
 
-    async def request_giant_fibre(self, ws):
-        response = await self.request(ws, "neurons:read", names=["Giant Fibre"], limit=10)
+    async def request_dnp01(self, ws):
+        response = await self.request(ws, "neurons:read", names=["DNp01"], limit=10)
         neurons = response.get("neurons", [])
-        matches = [n for n in neurons if str(n.get("name", n.get("type", ""))).casefold() == "giant fibre"]
+        matches = [n for n in neurons if str(n.get("name", n.get("type", ""))).casefold() == "dnp01"]
         if not matches:
-            raise RuntimeError("Giant Fibre neuron was not found in the registered neuron metadata.")
-        return max((float(n.get("activity") or 0.0) for n in matches), default=0.0)
+            raise RuntimeError("DNp01 neurons were not found in the registered neuron metadata.")
+        return matches
 
     @staticmethod
     def yaw_from_quaternion(q):
         x, y, z, w = map(float, q)
         return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
 
-    async def update_giant_fibre(self, ws):
-        activity = await self.request_giant_fibre(ws)
-        active = activity >= self.giant_threshold
-        if active and not self.giant_was_active:
+    async def update_dnp01(self, ws):
+        neurons = await self.request_dnp01(ws)
+        active_neurons = [
+            (neuron, float(neuron.get("activity") or 0.0))
+            for neuron in neurons
+            if float(neuron.get("activity") or 0.0) > 0.0
+        ]
+        active = bool(active_neurons)
+        if active and not self.dnp01_was_active:
+            details = ", ".join(
+                f"{neuron.get('name', 'DNp01')}#{neuron.get('id', '?')}={activity:g}"
+                for neuron, activity in active_neurons
+            )
+            print(f"DNp01 activity detected: {details} -> left click", flush=True)
             click_left()
-            print(f"Giant Fibre fired (activity {activity:.3f}) -> left click", flush=True)
-        self.giant_was_active = active
+        self.dnp01_was_active = active
 
     async def update(self, transform):
         position = tuple(map(float, transform["position"]))
@@ -163,11 +172,11 @@ class PositionBridge:
             while True:
                 transform = await self.request_transform(ws)
                 await self.update(transform)
-                await self.update_giant_fibre(ws)
+                await self.update_dnp01(ws)
                 await asyncio.sleep(self.interval)
 
 def main():
-    parser = argparse.ArgumentParser(description="Mirror fly movement with the mouse and Giant Fibre clicks")
+    parser = argparse.ArgumentParser(description="Mirror fly movement with the mouse and DNp01-triggered clicks")
     parser.add_argument("session_id", help="Session ID from ws://localhost:5173/ws/SESSION_ID")
     parser.add_argument("--url", help="Full WebSocket URL")
     parser.add_argument("--fly-id", type=int, help="Fly ID; defaults to the currently selected fly")
@@ -175,12 +184,11 @@ def main():
     parser.add_argument("--studs-per-unit", type=float, default=160.0, help="Mouse pixels per simulator unit")
     parser.add_argument("--turn-sign", type=float, choices=(-1.0, 1.0), default=1.0, help="Invert heading sign with -1")
     parser.add_argument("--max-step", type=float, default=0.5, help="Ignore larger position jumps as teleports")
-    parser.add_argument("--giant-threshold", type=float, default=0.5, help="Giant Fibre activity threshold for a click")
     args = parser.parse_args()
-    if args.interval < 0.03 or args.studs_per_unit <= 0 or args.max_step <= 0 or args.giant_threshold < 0:
-        parser.error("interval, studs-per-unit and max-step must be positive; giant-threshold cannot be negative")
+    if args.interval < 0.03 or args.studs_per_unit <= 0 or args.max_step <= 0:
+        parser.error("interval, studs-per-unit and max-step must be positive")
     url = args.url or f"ws://localhost:5173/ws/{args.session_id}"
-    bridge = PositionBridge(args.fly_id, args.interval, args.studs_per_unit, args.turn_sign, args.max_step, args.giant_threshold)
+    bridge = PositionBridge(args.fly_id, args.interval, args.studs_per_unit, args.turn_sign, args.max_step)
     try:
         asyncio.run(bridge.run(url))
     except KeyboardInterrupt:
