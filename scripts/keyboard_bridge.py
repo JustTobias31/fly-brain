@@ -156,7 +156,7 @@ class PositionBridge:
 
     async def run(self, url):
         print("Connecting:", url)
-        async with websockets.connect(url, ping_interval=20, ping_timeout=20) as ws:
+        async with websockets.connect(url, ping_interval=15, ping_timeout=None, open_timeout=10, close_timeout=5, max_queue=32) as ws:
             hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
             if hello.get("type") != "connected":
                 raise RuntimeError("Unexpected WebSocket handshake: " + str(hello))
@@ -172,7 +172,7 @@ def main():
     parser.add_argument("session_id", help="Session ID from ws://localhost:5173/ws/SESSION_ID")
     parser.add_argument("--url", help="Full WebSocket URL")
     parser.add_argument("--fly-id", type=int, help="Fly ID; defaults to the currently selected fly")
-    parser.add_argument("--interval", type=float, default=0.1, help="Position polling interval in seconds")
+    parser.add_argument("--interval", type=float, default=0.2, help="Position polling interval in seconds")
     parser.add_argument("--studs-per-unit", type=float, default=160.0, help="Roblox studs per simulator position unit (0.1 world units = 16 studs)")
     parser.add_argument("--turn-sign", type=float, choices=(-1.0, 1.0), default=1.0, help="Invert left/right camera mapping with -1")
     parser.add_argument("--max-step", type=float, default=0.5, help="Ignore larger position jumps as teleports")
