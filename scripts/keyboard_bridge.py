@@ -3,8 +3,9 @@
 
 Install: py -m pip install websockets pynput
 Run:     py scripts/keyboard_bridge.py SESSION_ID
-Optional: --fly-id 2 --studs-per-unit 3.57
+Optional: --fly-id 2 --studs-per-unit 160
 
+The bridge connects directly to FastAPI on port 8000, bypassing Vite's proxy.
 Roblox assumptions: WalkSpeed 16; a quick left/right tap turns the camera 5 degrees.
 Focus the Roblox window before running. Ctrl+C releases every held key.
 """
@@ -21,6 +22,7 @@ from pynput.keyboard import Controller, Key
 ARROWS = {"forward": Key.up, "backward": Key.down, "left": Key.left, "right": Key.right}
 GIANT_FIBRE_KEY = Key.space
 TURN_STEP_DEG = 5.0
+
 
 class PositionBridge:
     def __init__(self, fly_id, interval, studs_per_unit, turn_sign, max_step):
@@ -125,7 +127,7 @@ class PositionBridge:
         fly_id = transform.get("flyId", self.fly_id)
         if self.previous is None:
             self.previous = (position, yaw)
-            print(f"Tracking fly {fly_id}; initial position recorded. No movement yet.")
+            print(f"Tracking fly {fly_id}; initial position recorded. No movement yet.", flush=True)
             return
 
         old_position, old_yaw = self.previous
@@ -134,19 +136,17 @@ class PositionBridge:
         distance = math.hypot(dx, dy)
         turn = self.angle_delta(yaw, old_yaw) * self.turn_sign
         self.turn_remainder += math.degrees(turn)
-        taps = int(abs(self.turn_remainder) // TURN_STEP_DEG)
+        taps = min(int(abs(self.turn_remainder) // TURN_STEP_DEG), 12)
         direction = "right" if self.turn_remainder > 0 else "left"
-        taps = min(taps, 12)
         for _ in range(taps):
             await self.tap_turn(direction)
         if taps:
             self.turn_remainder -= math.copysign(taps * TURN_STEP_DEG, self.turn_remainder)
 
         if distance > self.max_step:
-            print(f"Ignored position jump ({distance:.3f} sim units); recalibrated baseline.")
+            print(f"Ignored position jump ({distance:.3f} sim units); recalibrated baseline.", flush=True)
             return
         if distance > 1e-5:
-            # Project displacement onto the fly's current forward direction.
             forward_x, forward_y = math.cos(yaw), math.sin(yaw)
             forward_distance = dx * forward_x + dy * forward_y
             if abs(forward_distance) > 1e-5:
@@ -155,22 +155,23 @@ class PositionBridge:
         print(f"Fly {fly_id} | Δx {dx:+.3f} Δy {dy:+.3f} | turn {math.degrees(turn):+.1f}° | taps {taps} | move {distance:.3f}", flush=True)
 
     async def run(self, url):
-        print("Connecting:", url)
+        print("Connecting directly to FastAPI:", url, flush=True)
         async with websockets.connect(url, ping_interval=15, ping_timeout=None, open_timeout=10, close_timeout=5, max_queue=32) as ws:
             hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
             if hello.get("type") != "connected":
                 raise RuntimeError("Unexpected WebSocket handshake: " + str(hello))
-            print("Connected. Focus Roblox now; Ctrl+C stops the bridge.")
+            print("Connected directly to FastAPI. Focus Roblox now; Ctrl+C stops the bridge.", flush=True)
             while True:
                 transform = await self.request_transform(ws)
                 await self.update(transform)
                 await self.check_giant_fibre(ws)
                 await asyncio.sleep(self.interval)
 
+
 def main():
     parser = argparse.ArgumentParser(description="Mirror fly position and heading with Roblox arrow keys")
-    parser.add_argument("session_id", help="Session ID from ws://localhost:5173/ws/SESSION_ID")
-    parser.add_argument("--url", help="Full WebSocket URL")
+    parser.add_argument("session_id", help="Session ID from the arena")
+    parser.add_argument("--url", help="Full WebSocket URL (overrides the direct FastAPI URL)")
     parser.add_argument("--fly-id", type=int, help="Fly ID; defaults to the currently selected fly")
     parser.add_argument("--interval", type=float, default=0.2, help="Position polling interval in seconds")
     parser.add_argument("--studs-per-unit", type=float, default=160.0, help="Roblox studs per simulator position unit (0.1 world units = 16 studs)")
@@ -179,7 +180,7 @@ def main():
     args = parser.parse_args()
     if args.interval < 0.03 or args.studs_per_unit <= 0 or args.max_step <= 0:
         parser.error("interval, studs-per-unit and max-step must be positive (interval >= 0.03)")
-    url = args.url or f"ws://localhost:5173/ws/{args.session_id}"
+    url = args.url or f"ws://127.0.0.1:8000/ws/{args.session_id}"
     bridge = PositionBridge(args.fly_id, args.interval, args.studs_per_unit, args.turn_sign, args.max_step)
     try:
         asyncio.run(bridge.run(url))
@@ -192,6 +193,7 @@ def main():
         for key in (*ARROWS.values(), GIANT_FIBRE_KEY):
             bridge.keyboard.release(key)
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
