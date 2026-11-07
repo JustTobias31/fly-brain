@@ -209,15 +209,10 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
             if target is None or target is exclude:
                 continue
             try:
-                # Never let a slow controller stall the simulation's activity loop.
-                await asyncio.wait_for(target.send_json(message), timeout=1.0)
+                await target.send_json(message)
                 delivered += 1
-            except (asyncio.TimeoutError, Exception):
+            except Exception:
                 stale.append(target)
-                try:
-                    await asyncio.wait_for(target.close(code=1013, reason="Client too slow or disconnected"), timeout=0.5)
-                except Exception:
-                    pass
         for target in stale:
             session["controllers"].discard(target)
             if session.get("owner") is target:
