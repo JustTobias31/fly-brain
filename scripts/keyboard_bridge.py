@@ -47,7 +47,6 @@ class PositionBridge:
             message = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             message = raw
-        log_ws("RECV", message)
         return message
 
     async def request_transform(self, ws):
@@ -65,6 +64,7 @@ class PositionBridge:
                 if response.get("type") == "error":
                     raise RuntimeError(response.get("error", "WebSocket API error"))
                 continue
+            log_ws("RECV", response)
             if response.get("type") == "error" or response.get("error"):
                 raise RuntimeError(response.get("error", "Could not read fly transform"))
             if not all(k in response for k in ("position", "rotation")):
