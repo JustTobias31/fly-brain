@@ -14,6 +14,7 @@ import asyncio
 import json
 import math
 import sys
+from datetime import datetime
 from itertools import count
 
 import websockets
@@ -21,6 +22,11 @@ from pynput.keyboard import Controller, Key
 
 ARROWS = {"forward": Key.up, "backward": Key.down, "left": Key.left, "right": Key.right}
 TURN_STEP_DEG = 5.0
+
+
+def log_ws(direction, message):
+    timestamp = datetime.now().astimezone().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[{timestamp}] WS {direction}: {json.dumps(message, ensure_ascii=False, separators=(',', ':'))}", flush=True)
 
 
 class PositionBridge:
@@ -35,15 +41,26 @@ class PositionBridge:
         self.previous = None
         self.turn_remainder = 0.0
 
+    async def receive(self, ws):
+        raw = await ws.recv()
+        try:
+            message = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            message = raw
+        log_ws("RECV", message)
+        return message
+
     async def request_transform(self, ws):
         request_id = f"position-bridge-{next(self.ids)}"
         message = {"type": "fly:transform:get", "requestId": request_id}
         if self.fly_id is not None:
             message["flyId"] = self.fly_id
+        log_ws("SEND", message)
         await ws.send(json.dumps(message))
         while True:
-            raw = await asyncio.wait_for(ws.recv(), timeout=3)
-            response = json.loads(raw)
+            response = await asyncio.wait_for(self.receive(ws), timeout=3)
+            if not isinstance(response, dict):
+                continue
             if response.get("requestId") != request_id:
                 if response.get("type") == "error":
                     raise RuntimeError(response.get("error", "WebSocket API error"))
@@ -117,8 +134,8 @@ class PositionBridge:
     async def run(self, url):
         print("Connecting through Vite:", url, flush=True)
         async with websockets.connect(url, ping_interval=15, ping_timeout=None, open_timeout=10, close_timeout=5, max_queue=32) as ws:
-            hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=10))
-            if hello.get("type") != "connected":
+            hello = await asyncio.wait_for(self.receive(ws), timeout=10)
+            if not isinstance(hello, dict) or hello.get("type") != "connected":
                 raise RuntimeError("Unexpected WebSocket handshake: " + str(hello))
             print("Connected through Vite. Focus Roblox now; Ctrl+C stops the bridge.", flush=True)
             while True:
