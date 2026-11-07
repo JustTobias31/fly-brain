@@ -19,6 +19,7 @@ import websockets
 from pynput.keyboard import Controller, Key
 
 ARROWS = {"forward": Key.up, "backward": Key.down, "left": Key.left, "right": Key.right}
+GIANT_FIBRE_KEY = Key.space
 TURN_STEP_DEG = 5.0
 
 class PositionBridge:
@@ -32,6 +33,7 @@ class PositionBridge:
         self.ids = count(1)
         self.previous = None
         self.turn_remainder = 0.0
+        self.giant_fibre_active = False
 
     async def request_transform(self, ws):
         request_id = f"position-bridge-{next(self.ids)}"
@@ -51,6 +53,44 @@ class PositionBridge:
             if not all(k in response for k in ("position", "rotation")):
                 raise RuntimeError(f"Unexpected transform response: {response}")
             return response
+
+    async def check_giant_fibre(self, ws):
+        request_id = f"giant-fibre-{next(self.ids)}"
+        await ws.send(json.dumps({
+            "type": "neurons:read",
+            "requestId": request_id,
+            "names": ["DNp01"],
+            "limit": 10,
+        }))
+        while True:
+            raw = await asyncio.wait_for(ws.recv(), timeout=3)
+            response = json.loads(raw)
+            if response.get("requestId") != request_id:
+                if response.get("type") == "error":
+                    raise RuntimeError(response.get("error", "WebSocket API error"))
+                continue
+            if response.get("type") == "error":
+                raise RuntimeError(response.get("error", "Could not read Giant Fibre activity"))
+            neurons = response.get("neurons", [])
+            active = []
+            for neuron in neurons:
+                try:
+                    activity = float(neuron.get("activity", 0.0))
+                except (TypeError, ValueError):
+                    activity = 0.0
+                if activity > 0:
+                    active.append((neuron.get("id"), activity))
+
+            if active and not self.giant_fibre_active:
+                details = ", ".join(f"{neuron_id}: {activity:.4f}" for neuron_id, activity in active)
+                print(f"Giant Fibre active ({details}) -> SPACE", flush=True)
+                self.keyboard.press(GIANT_FIBRE_KEY)
+                try:
+                    await asyncio.sleep(0.06)
+                finally:
+                    self.keyboard.release(GIANT_FIBRE_KEY)
+            self.giant_fibre_active = bool(active)
+            return
 
     @staticmethod
     def yaw_from_quaternion(q):
@@ -124,6 +164,7 @@ class PositionBridge:
             while True:
                 transform = await self.request_transform(ws)
                 await self.update(transform)
+                await self.check_giant_fibre(ws)
                 await asyncio.sleep(self.interval)
 
 def main():
@@ -148,7 +189,7 @@ def main():
         print("\nBridge error:", exc, file=sys.stderr)
         return 1
     finally:
-        for key in ARROWS.values():
+        for key in (*ARROWS.values(), GIANT_FIBRE_KEY):
             bridge.keyboard.release(key)
     return 0
 
