@@ -74,44 +74,35 @@ class PositionBridge:
         self.mouse_remainder_x = 0.0
         self.mouse_remainder_y = 0.0
 
-    async def request(self, ws, message_type, **fields):
-        request_id = f"keyboard-bridge-{next(self.ids)}"
-        await ws.send(json.dumps({"type": message_type, "requestId": request_id, **fields}))
-        while True:
-            raw = await asyncio.wait_for(ws.recv(), timeout=3)
-            response = json.loads(raw)
-            if response.get("requestId") != request_id:
-                if response.get("type") == "error":
-                    raise RuntimeError(response.get("error", "WebSocket API error"))
-                continue
-            if response.get("type") == "error" or response.get("error"):
-                raise RuntimeError(response.get("error", f"{message_type} failed"))
-            return response
-
-    async def request_transform(self, ws):
-        fields = {}
+    async def start_streams(self, ws):
+        self.transform_request_id = "mouse-bridge-transform"
+        self.neuron_request_id = "mouse-bridge-dnp01"
+        transform = {
+            "type": "fly:transform:get",
+            "requestId": self.transform_request_id,
+            "constant": True,
+            "intervalMs": max(50, min(5000, int(self.interval * 1000))),
+        }
         if self.fly_id is not None:
-            fields["flyId"] = self.fly_id
-        response = await self.request(ws, "fly:transform:get", **fields)
-        if not all(k in response for k in ("position", "rotation")):
-            raise RuntimeError(f"Unexpected transform response: {response}")
-        return response
-
-    async def request_dnp01(self, ws):
-        response = await self.request(ws, "neurons:read", names=["DNp01"], limit=10)
-        neurons = response.get("neurons", [])
-        matches = [n for n in neurons if str(n.get("name", n.get("type", ""))).casefold() == "dnp01"]
-        if not matches:
-            raise RuntimeError("DNp01 neurons were not found in the registered neuron metadata.")
-        return matches
+            transform["flyId"] = self.fly_id
+        neurons = {
+            "type": "neurons:read",
+            "requestId": self.neuron_request_id,
+            "names": ["DNp01"],
+            "limit": 10,
+            "constant": True,
+            "intervalMs": max(50, min(5000, int(self.interval * 1000))),
+        }
+        await ws.send(json.dumps(transform))
+        await ws.send(json.dumps(neurons))
+        print(f"Subscribed to fly transform and DNp01 streams ({transform['intervalMs']} ms).", flush=True)
 
     @staticmethod
     def yaw_from_quaternion(q):
         x, y, z, w = map(float, q)
         return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
 
-    async def update_dnp01(self, ws):
-        neurons = await self.request_dnp01(ws)
+    def update_dnp01(self, neurons):
         active_neurons = [
             (neuron, float(neuron.get("activity") or 0.0))
             for neuron in neurons
@@ -169,11 +160,40 @@ class PositionBridge:
             if hello.get("type") != "connected":
                 raise RuntimeError("Unexpected WebSocket handshake: " + str(hello))
             print("Connected. Focus the target window; Ctrl+C stops the bridge.")
-            while True:
-                transform = await self.request_transform(ws)
-                await self.update(transform)
-                await self.update_dnp01(ws)
-                await asyncio.sleep(self.interval)
+            await self.start_streams(ws)
+            try:
+                while True:
+                    raw = await ws.recv()
+                    try:
+                        response = json.loads(raw)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    if not isinstance(response, dict):
+                        continue
+                    request_id = response.get("requestId")
+                    if response.get("type") == "error":
+                        if request_id in {self.transform_request_id, self.neuron_request_id}:
+                            raise RuntimeError(response.get("error", "WebSocket stream failed"))
+                        continue
+                    if request_id == self.transform_request_id:
+                        if response.get("type") == "fly:transform:result" and all(k in response for k in ("position", "rotation")):
+                            await self.update(response)
+                    elif request_id == self.neuron_request_id:
+                        if response.get("type") == "neurons:read:result":
+                            neurons = response.get("neurons", [])
+                            matches = [
+                                neuron for neuron in neurons
+                                if str(neuron.get("name", neuron.get("type", ""))).casefold() == "dnp01"
+                            ]
+                            if matches:
+                                self.update_dnp01(matches)
+            finally:
+                for request_id in (self.transform_request_id, self.neuron_request_id):
+                    stop = {"type": "streamstop", "requestId": request_id}
+                    try:
+                        await ws.send(json.dumps(stop))
+                    except Exception:
+                        pass
 
 def main():
     parser = argparse.ArgumentParser(description="Mirror fly movement with the mouse and DNp01-triggered clicks")
