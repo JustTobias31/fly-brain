@@ -49,27 +49,19 @@ class PositionBridge:
             message = raw
         return message
 
-    async def request_transform(self, ws):
-        request_id = f"position-bridge-{next(self.ids)}"
-        message = {"type": "fly:transform:get", "requestId": request_id}
+    async def start_transform_stream(self, ws):
+        self.transform_request_id = "keyboard-bridge-transform"
+        message = {
+            "type": "fly:transform:get",
+            "requestId": self.transform_request_id,
+            "constant": True,
+            "intervalMs": max(50, min(5000, int(self.interval * 1000))),
+        }
         if self.fly_id is not None:
             message["flyId"] = self.fly_id
         log_ws("SEND", message)
         await ws.send(json.dumps(message))
-        while True:
-            response = await asyncio.wait_for(self.receive(ws), timeout=3)
-            if not isinstance(response, dict):
-                continue
-            if response.get("requestId") != request_id:
-                if response.get("type") == "error":
-                    raise RuntimeError(response.get("error", "WebSocket API error"))
-                continue
-            log_ws("RECV", response)
-            if response.get("type") == "error" or response.get("error"):
-                raise RuntimeError(response.get("error", "Could not read fly transform"))
-            if not all(k in response for k in ("position", "rotation")):
-                raise RuntimeError(f"Unexpected transform response: {response}")
-            return response
+        print(f"Subscribed to continuous fly transform updates ({message['intervalMs']} ms).", flush=True)
 
     @staticmethod
     def yaw_from_quaternion(q):
@@ -138,10 +130,31 @@ class PositionBridge:
             if not isinstance(hello, dict) or hello.get("type") != "connected":
                 raise RuntimeError("Unexpected WebSocket handshake: " + str(hello))
             print("Connected through Vite. Focus Roblox now; Ctrl+C stops the bridge.", flush=True)
-            while True:
-                transform = await self.request_transform(ws)
-                await self.update(transform)
-                await asyncio.sleep(self.interval)
+            await self.start_transform_stream(ws)
+            try:
+                while True:
+                    response = await self.receive(ws)
+                    if not isinstance(response, dict):
+                        continue
+                    if response.get("requestId") != self.transform_request_id:
+                        if response.get("type") == "error" and not response.get("requestId"):
+                            raise RuntimeError(response.get("error", "WebSocket API error"))
+                        continue
+                    if response.get("type") == "error" or response.get("error"):
+                        raise RuntimeError(response.get("error", "Fly transform stream failed"))
+                    if response.get("type") != "fly:transform:result":
+                        continue
+                    if not all(k in response for k in ("position", "rotation")):
+                        print("Ignored malformed transform update.", flush=True)
+                        continue
+                    await self.update(response)
+            finally:
+                stop = {"type": "streamstop", "requestId": self.transform_request_id}
+                try:
+                    await ws.send(json.dumps(stop))
+                    log_ws("SEND", stop)
+                except Exception:
+                    pass
 
 
 def main():
