@@ -449,3 +449,24 @@ For command acknowledgements, use a consistent reply shape:
 ## Security note
 
 This API is intended for local development. Do not expose it directly to the public internet without authentication, authorization, and stricter origin/network controls.
+
+
+## Constant WebSocket data streams
+
+Any supported **read request** can be turned into a continuous stream by adding `constant: true` and a unique `requestId`. The first result is sent immediately, then refreshed every 100 ms by default. Set `intervalMs` to change the update interval (50–5000 ms).
+
+Example:
+
+```json
+{"type":"fly:transform:get","flyId":0,"constant":true,"intervalMs":100,"requestId":"fly-position"}
+```
+
+The same result type is sent repeatedly, with the same `requestId`. Supported streamed requests are `fly:transform:get`, `arena:list`, `dopamine:read`, `circuit:list`, `circuit:read`, and `neurons:read`.
+
+Stop one stream without affecting other requests:
+
+```json
+{"type":"streamstop","requestId":"fly-position"}
+```
+
+Streams are stopped when the requesting controller disconnects. `constant` is only valid for read requests; mutation/command messages cannot be streamed.
