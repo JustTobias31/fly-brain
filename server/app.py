@@ -448,7 +448,12 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                         try:
                             while True:
                                 await asyncio.sleep(interval_ms / 1000)
-                                await ws.send_json(result)
+                                current = list(neurons.values())
+                                if ids is not None or names is not None:
+                                    current = [n for n in current if n.get("id") in wanted_ids or str(n.get("name", n.get("type", ""))).casefold() in wanted_names]
+                                current_batch = current[offset:offset + limit]
+                                current_next = offset + len(current_batch) if offset + len(current_batch) < len(current) else None
+                                await ws.send_json({"type": "neurons:read:result", "requestId": request_id, "neurons": current_batch, "missing": missing, "total": len(current), "offset": offset, "nextOffset": current_next})
                         except (WebSocketDisconnect, RuntimeError):
                             pass
                         finally:
@@ -497,9 +502,10 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                         session["controllers"].discard(controller)
             elif role == "controller":
                 session["controllers"].discard(ws)
-                for task in tuple(stream_tasks.values()):
-                    task.cancel()
                 for request_id in session["streams"].pop(ws, set()):
+                    task = stream_tasks.pop(request_id, None)
+                    if task is not None:
+                        task.cancel()
                     owner = session.get("owner")
                     if owner is not None:
                         try:
