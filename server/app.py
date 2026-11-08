@@ -38,7 +38,7 @@ sessions: dict[str, dict[str, Any]] = {}
 @app.post("/sessions")
 async def create_session():
     session_id = uuid.uuid4().hex[:16]
-    sessions[session_id] = {"owner": None, "controllers": set(), "neurons": {}, "active_neuron_ids": set(), "state": {"updated_at": None, "body": None, "activity": None}, "simulation_status": "stopped", "created_at": time.time()}
+    sessions[session_id] = {"owner": None, "controllers": set(), "streams": {}, "neurons": {}, "active_neuron_ids": set(), "state": {"updated_at": None, "body": None, "activity": None}, "simulation_status": "stopped", "created_at": time.time()}
     return {"session_id": session_id, "websocket_path": f"/ws/{session_id}", "controller_url": f"/ws/{session_id}"}
 
 
@@ -219,6 +219,7 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 session["owner"] = None
         return delivered
     vision_last_frame = 0.0
+    stream_tasks: dict[str, asyncio.Task] = {}
     try:
         await ws.send_json({"type": "connected", "session_id": session_id, "role": role, "registered_neurons": len(neurons), "state": latest_state, "simulation_status": session.get("simulation_status", "stopped") if session else None})
         if session is not None and role == "controller" and neurons:
@@ -230,10 +231,13 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
             kind = message.get("type")
             if session is not None:
                 owner_messages = {"neurons:register", "neurons:activity", "state", "vision:frame", "vision:stop", "vision:eyes", "simulation:status", "ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result", "circuit:list:result", "circuit:read:result"}
-                controller_commands = {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "scaffold:set", "vision:frame", "vision:stop", "neurons:read", "circuit:list", "circuit:read"}
+                controller_commands = {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "dopamine:read", "scaffold:set", "vision:frame", "vision:stop", "neurons:read", "circuit:list", "circuit:read", "streamstop"}
                 if (role == "owner" and kind not in owner_messages and kind != "ping") or (role == "controller" and kind in owner_messages and kind not in {"vision:frame", "vision:stop"} and kind not in controller_commands):
                     await ws.send_json({"type": "error", "error": f"Message type {kind} is not allowed for role {role}", "requestId": message.get("requestId")})
                     continue
+            if session is not None and role == "controller" and message.get("constant") is True and kind not in {"arena:list", "fly:transform:get", "dopamine:read", "neurons:read", "circuit:list", "circuit:read"}:
+                await ws.send_json({"type": "error", "error": f"{kind} is not a read request and cannot be streamed", "requestId": message.get("requestId")})
+                continue
             if kind == "neurons:register":
                 items = message.get("neurons", [])
                 if not isinstance(items, list):
@@ -390,6 +394,18 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                 if state in {"running", "paused", "stopped"}:
                     session["simulation_status"] = state
                     await route({"type": "simulation:status", "state": state, "timestamp": time.time()}, exclude=ws)
+            elif kind == "streamstop" and session is not None and role == "controller":
+                request_id = message.get("requestId")
+                if request_id is None:
+                    await ws.send_json({"type": "error", "error": "streamstop requires requestId"})
+                    continue
+                request_id = str(request_id)
+                task = stream_tasks.pop(request_id, None)
+                if task is not None:
+                    task.cancel()
+                session["streams"].setdefault(ws, set()).discard(request_id)
+                await route({"type": "streamstop", "requestId": request_id}, exclude=ws)
+                await ws.send_json({"type": "stream:stopped", "requestId": request_id})
             elif kind == "neurons:read" and session is not None and role == "controller":
                 ids = message.get("ids")
                 names = message.get("names")
@@ -415,12 +431,46 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                     continue
                 batch = selected[offset:offset + limit]
                 next_offset = offset + len(batch) if offset + len(batch) < len(selected) else None
-                await ws.send_json({"type": "neurons:read:result", "requestId": message.get("requestId"), "neurons": batch, "missing": missing, "total": len(selected), "offset": offset, "nextOffset": next_offset})
-            elif kind in {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "scaffold:set"} and session is not None and role == "controller":
+                request_id = message.get("requestId")
+                result = {"type": "neurons:read:result", "requestId": request_id, "neurons": batch, "missing": missing, "total": len(selected), "offset": offset, "nextOffset": next_offset}
+                await ws.send_json(result)
+                if message.get("constant") is True:
+                    if request_id is None:
+                        await ws.send_json({"type": "error", "error": "constant streams require requestId"})
+                        continue
+                    request_id = str(request_id)
+                    previous = stream_tasks.pop(request_id, None)
+                    if previous is not None:
+                        previous.cancel()
+                    session["streams"].setdefault(ws, set()).add(request_id)
+                    interval_ms = max(50, min(5000, int(message.get("intervalMs", 100))))
+                    async def stream_neurons():
+                        try:
+                            while True:
+                                await asyncio.sleep(interval_ms / 1000)
+                                await ws.send_json(result)
+                        except (WebSocketDisconnect, RuntimeError):
+                            pass
+                        finally:
+                            stream_tasks.pop(request_id, None)
+                    stream_tasks[request_id] = asyncio.create_task(stream_neurons())
+            elif kind in {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "dopamine:read", "scaffold:set"} and session is not None and role == "controller":
+                if message.get("constant") is True:
+                    request_id = message.get("requestId")
+                    if request_id is None:
+                        await ws.send_json({"type": "error", "error": "constant streams require requestId"})
+                        continue
+                    session["streams"].setdefault(ws, set()).add(str(request_id))
                 delivered = await route(message, exclude=ws)
                 if delivered == 0:
                     await ws.send_json({"type": "ack", "requestId": message.get("requestId"), "ok": False, "error": "Arena owner is offline"})
             elif kind in {"circuit:list", "circuit:read"} and session is not None and role == "controller":
+                if message.get("constant") is True:
+                    request_id = message.get("requestId")
+                    if request_id is None:
+                        await ws.send_json({"type": "error", "error": "constant streams require requestId"})
+                        continue
+                    session["streams"].setdefault(ws, set()).add(str(request_id))
                 if kind == "circuit:read" and not isinstance(message.get("group"), str):
                     await ws.send_json({"type": "error", "error": "group must be a circuit key or label", "requestId": message.get("requestId")})
                     continue
@@ -447,6 +497,15 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
                         session["controllers"].discard(controller)
             elif role == "controller":
                 session["controllers"].discard(ws)
+                for task in tuple(stream_tasks.values()):
+                    task.cancel()
+                for request_id in session["streams"].pop(ws, set()):
+                    owner = session.get("owner")
+                    if owner is not None:
+                        try:
+                            await owner.send_json({"type": "streamstop", "requestId": request_id})
+                        except Exception:
+                            pass
 
 
 @app.websocket("/ws/{session_id}")
