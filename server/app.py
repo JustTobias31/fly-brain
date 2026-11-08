@@ -230,7 +230,7 @@ async def handle_websocket(ws: WebSocket, session_id: str | None = None, role: s
             message = await ws.receive_json()
             kind = message.get("type")
             if session is not None:
-                owner_messages = {"neurons:register", "neurons:activity", "state", "vision:frame", "vision:stop", "vision:eyes", "simulation:status", "ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result", "circuit:list:result", "circuit:read:result"}
+                owner_messages = {"neurons:register", "neurons:activity", "state", "vision:frame", "vision:stop", "vision:eyes", "simulation:status", "ack", "error", "arena:list:result", "neurons:read:result", "fly:transform:result", "dopamine:read:result", "circuit:list:result", "circuit:read:result"}
                 controller_commands = {"simulation:control", "element:command", "property:set", "arena:list", "loom:trigger", "fly:takeoff", "fly:transform:get", "dopamine:read", "scaffold:set", "vision:frame", "vision:stop", "neurons:read", "circuit:list", "circuit:read", "streamstop"}
                 if (role == "owner" and kind not in owner_messages and kind != "ping") or (role == "controller" and kind in owner_messages and kind not in {"vision:frame", "vision:stop"} and kind not in controller_commands):
                     await ws.send_json({"type": "error", "error": f"Message type {kind} is not allowed for role {role}", "requestId": message.get("requestId")})
